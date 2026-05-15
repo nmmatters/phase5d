@@ -267,6 +267,62 @@ Renders frames and assembles them into an mp4 via ffmpeg.
 `x0_values` defaults to the full grid inferred from the data.
 Returns the absolute path of the video file.
 
+#### `.show_interactive(x0_init=0.0, mode='fixed', render='scatter', …)`
+
+Opens a **live matplotlib window** with three slider widgets:
+
+| Slider | Range | Description |
+|--------|-------|-------------|
+| `x(Fe)` | data min → max | Sweeps the x₀ composition slice; snaps to the grid step detected from the data |
+| `Elevation` | −90 → 90 | Camera elevation angle (°) |
+| `Azimuth` | 0 → 360 | Camera azimuth angle (°) |
+
+All `plot_frame` keyword arguments (`alpha`, `marker_size`, `show_wireframe`,
+`wireframe_alpha`, `wireframe_color`, `show_vertex_labels`, `figsize`,
+`render`, `**kwargs`) are accepted.  The colorbar / legend is created once
+at startup and does not flicker on slider updates.
+
+> **Note**: requires an interactive matplotlib backend.  If you are inside a
+> Jupyter notebook, run `%matplotlib widget` (or `qt`) first.  In a plain
+> script, the call blocks until the window is closed.
+
+```python
+pd5.show_interactive(x0_init=0.2, render='scatter', max_points=5000)
+```
+
+#### `.save_vtk(output_path, max_points=None, include_compositions=True)`
+
+Exports the full dataset as a **VTK XML Unstructured Grid** (`.vtu`) file for
+use in [ParaView](https://www.paraview.org/) or any VTK-compatible viewer.
+
+Every point is placed at its natural barycentric position
+`P = x₁·V₀ + x₂·V₁ + x₃·V₂ + x₄·V₃` — the same embedding used by
+`plot_isosurface`.  Scalar fields written per point:
+
+| Field | Content |
+|-------|---------|
+| `value` (or `value_label`) | The scalar property column |
+| `x0` … `x4` | Individual composition fractions |
+| `stability` | Stability labels (−1 / 0 / 1), if available |
+
+The file uses inline base64 binary encoding and requires **no extra
+dependencies** (uses Python's stdlib `base64` module).
+
+**Suggested ParaView workflow**
+
+1. *File → Open* the `.vtu` file and click *Apply*.
+2. Add a **Threshold** filter on `x0` to interactively slice by Fe content.
+3. Add a **Contour** filter on `value` to extract isosurfaces.
+4. Switch the representation to *Point Gaussian* for scatter-style rendering;
+   color by any scalar field.
+
+```python
+pd5.save_vtk('phase_diagram.vtu')                          # full dataset
+pd5.save_vtk('phase_diagram_small.vtu', max_points=200_000)  # downsampled
+```
+
+Returns the absolute path of the written file.
+
 ---
 
 ### Utility functions
@@ -293,6 +349,7 @@ See the [`examples/`](examples/) directory:
 |------|-------------|
 | [`example_continuous.py`](examples/example_continuous.py) | Mixing enthalpy landscape, all three modes, video |
 | [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, custom colors, video |
+| [`example_isosurface.py`](examples/example_isosurface.py) | Isosurface rendering — single, nested, and rotated views |
 
 Run from the repository root:
 
@@ -313,6 +370,8 @@ python examples/example_phase_stability.py
 - **Colormap**: `'RdBu_r'` works well for enthalpy (red = positive,
   blue = negative); `'plasma'` for monotone properties.
 - **ffmpeg not found?** `from phase5d.video import check_ffmpeg; print(check_ffmpeg())`
+- **Interactive exploration**: `pd5.show_interactive()` opens a live window with sliders for x₀, elevation, and azimuth — no video needed.
+- **ParaView export**: `pd5.save_vtk('diagram.vtu')` writes the full point cloud with all scalar fields; use Threshold on `x0` and Contour on `value` in ParaView for fully interactive 3-D analysis.
 
 ---
 

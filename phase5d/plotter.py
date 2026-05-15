@@ -2,6 +2,7 @@
 Main PhaseDiagram5D class for rendering and exporting frames/videos.
 """
 
+import base64
 import os
 import shutil
 import tempfile
@@ -1028,3 +1029,358 @@ class PhaseDiagram5D:
             self._add_phase_legend(fig)
 
         return fig, ax3d
+
+    def show_interactive(
+        self,
+        x0_init: float = 0.0,
+        mode: str = "fixed",
+        render: str = "scatter",
+        alpha: float = 0.65,
+        marker_size: float = 3,
+        max_points: int = 5000,
+        show_wireframe: bool = True,
+        wireframe_alpha: float = 0.20,
+        wireframe_color: str = "black",
+        show_vertex_labels: bool = True,
+        elev: float = 20,
+        azim: float = 45,
+        figsize: Tuple[float, float] = (9, 10),
+        **kwargs,
+    ) -> None:
+        """
+        Open an interactive matplotlib window with sliders for x₀, elevation,
+        and azimuth.
+
+        Drag the **x₀** slider to sweep through the fifth composition axis.
+        Drag **Elevation** and **Azimuth** to rotate the tetrahedron freely.
+        All other rendering options (``mode``, ``render``, ``alpha``, …) are
+        fixed at call time but can be changed by calling the method again.
+
+        .. note::
+            This method calls ``plt.show()`` (blocking).  It requires an
+            interactive matplotlib backend — do **not** call
+            ``matplotlib.use('Agg')`` before using it.  From a script, run
+            with a GUI backend such as ``TkAgg`` or ``Qt5Agg``::
+
+                import matplotlib
+                matplotlib.use('TkAgg')   # before importing phase5d
+
+        Parameters
+        ----------
+        x0_init : float
+            Starting x₀ value (default 0).
+        mode : {'fixed', 'shrink_center', 'shrink_corner'}
+            Tetrahedron scaling mode.
+        render : {'scatter', 'surface'}
+            Rendering style.
+        alpha : float
+            Point / face transparency for continuous values.
+        marker_size : float
+            Scatter marker size (``render='scatter'`` only).
+        max_points : int
+            Maximum data points rendered per frame.  Keep low (≤ 5 000) for
+            a smooth interactive response.
+        show_wireframe : bool
+            Draw tetrahedron edges.
+        wireframe_alpha : float
+            Wireframe transparency.
+        wireframe_color : str
+            Wireframe color.
+        show_vertex_labels : bool
+            Label vertices with component names.
+        elev : float
+            Initial elevation angle (degrees).
+        azim : float
+            Initial azimuth angle (degrees).
+        figsize : (width, height)
+            Figure size in inches.
+        **kwargs
+            Forwarded to the underlying render call (same as
+            :meth:`plot_frame`).
+        """
+        from matplotlib.widgets import Slider
+
+        # ── Detect x0 range from data ────────────────────────────────────
+        x0_all = self.data[:, 0]
+        x0_min = float(x0_all.min())
+        x0_max = float(x0_all.max())
+        # Infer grid step from the data so the slider snaps to real values
+        unique_x0 = np.unique(np.round(x0_all, 4))
+        if len(unique_x0) > 1:
+            x0_step = float(np.round(np.median(np.diff(unique_x0)), 4))
+        else:
+            x0_step = 0.01
+        x0_init = float(np.clip(x0_init, x0_min, x0_max))
+
+        lbl0 = self.component_labels[0]
+
+        # ── Figure layout ─────────────────────────────────────────────────
+        fig = plt.figure(figsize=figsize)
+
+        ax3d: Axes3D = fig.add_axes(
+            [0.02, 0.27, 0.80, 0.70], projection="3d"
+        )
+        ax_bar = fig.add_axes([0.08, 0.21, 0.72, 0.04])
+
+        # Sliders
+        ax_sl_x0   = fig.add_axes([0.15, 0.155, 0.65, 0.025])
+        ax_sl_elev = fig.add_axes([0.15, 0.100, 0.65, 0.025])
+        ax_sl_azim = fig.add_axes([0.15, 0.045, 0.65, 0.025])
+
+        sl_x0   = Slider(ax_sl_x0,   f"x({lbl0})", x0_min, x0_max,
+                         valinit=x0_init, valstep=x0_step, color="#4477aa")
+        sl_elev = Slider(ax_sl_elev, "Elevation",  -90,   90,
+                         valinit=elev,    valstep=1,      color="#888888")
+        sl_azim = Slider(ax_sl_azim, "Azimuth",      0,  360,
+                         valinit=azim,    valstep=1,      color="#888888")
+
+        # Static decorations (colorbar / legend) — created once
+        if self.value_type == "continuous":
+            self._add_colorbar(fig, ax_left=0.85)
+            if self._stability_data is not None:
+                self._add_phase_legend(fig)
+        else:
+            self._add_phase_legend(fig)
+
+        # ── Update callback ───────────────────────────────────────────────
+        def _redraw(_event=None):
+            x0  = float(sl_x0.val)
+            e   = float(sl_elev.val)
+            a   = float(sl_azim.val)
+
+            ax3d.cla()
+            ax3d.set_axis_off()
+
+            if show_wireframe:
+                self._draw_wireframe(ax3d, x0, mode,
+                                     wireframe_alpha, wireframe_color)
+
+            # Slice data
+            mask = np.abs(self.data[:, 0] - x0) <= self.tolerance
+            sd = self.data[mask]
+            stab = (self._stability_data[mask]
+                    if self._stability_data is not None else None)
+
+            if len(sd) > 0:
+                if len(sd) > max_points:
+                    rng = np.random.default_rng(42)
+                    idx = rng.choice(len(sd), size=max_points, replace=False)
+                    sd   = sd[idx]
+                    if stab is not None:
+                        stab = stab[idx]
+
+                x1, x2, x3, x4 = (sd[:, k] for k in range(1, 5))
+                vals = sd[:, 5]
+                pts  = compositions_to_cartesian(x1, x2, x3, x4,
+                                                 x0=x0, mode=mode)
+                rgba = self._map_colors(vals, alpha=alpha, stability=stab)
+
+                if render == "surface":
+                    self._render_surface(ax3d, pts, rgba, vals, stab,
+                                         **kwargs)
+                else:
+                    self._render_scatter(ax3d, pts, rgba, marker_size,
+                                         **kwargs)
+
+            if show_vertex_labels:
+                self._label_vertices(ax3d, mode, x0)
+
+            buf = 0.12
+            ax3d.set_xlim(VERTICES[:, 0].min() - buf,
+                          VERTICES[:, 0].max() + buf)
+            ax3d.set_ylim(VERTICES[:, 1].min() - buf,
+                          VERTICES[:, 1].max() + buf)
+            ax3d.set_zlim(VERTICES[:, 2].min() - buf,
+                          VERTICES[:, 2].max() + buf)
+            ax3d.view_init(elev=e, azim=a)
+
+            # Refresh scale bar
+            ax_bar.cla()
+            self._draw_scale_bar(ax_bar, x0)
+
+            fig.canvas.draw_idle()
+
+        sl_x0.on_changed(_redraw)
+        sl_elev.on_changed(_redraw)
+        sl_azim.on_changed(_redraw)
+
+        _redraw()   # initial draw
+        plt.show()
+
+    def save_vtk(
+        self,
+        output_path: str,
+        max_points: Optional[int] = None,
+        include_compositions: bool = True,
+    ) -> str:
+        """
+        Export the dataset as a VTK XML Unstructured Grid (``.vtu``) file for
+        use in ParaView or any VTK-compatible viewer.
+
+        Every data point is placed at its natural barycentric position
+        ``P = x₁·V₀ + x₂·V₁ + x₃·V₂ + x₄·V₃`` — the same coordinate system
+        used by :meth:`plot_isosurface`.  Scalar fields stored per point:
+
+        ============== ==============================================
+        Field          Content
+        ============== ==============================================
+        ``value``      The value column (or ``value_label`` if set)
+        ``x0`` … ``x4`` Individual composition fractions
+        ``stability``  Stability labels (−1 / 0 / 1), if available
+        ============== ==============================================
+
+        **Suggested ParaView workflow**
+
+        1. *File → Open* the ``.vtu`` file.
+        2. Apply a **Threshold** filter on ``x0`` to slice by Fe content.
+        3. Apply a **Contour** filter on ``value`` to extract isosurfaces.
+        4. Color by any scalar field; use *Point Gaussian* for scatter-style
+           rendering.
+
+        The file is written in VTK XML binary format with base64 encoding
+        (no extra dependencies required).  For large datasets (> 1 M points)
+        this produces files of roughly 60–80 MB for 4.6 M points; use
+        *max_points* to downsample if storage is a concern.
+
+        Parameters
+        ----------
+        output_path : str
+            Destination file path (should end in ``.vtu``).
+        max_points : int or None
+            If set, randomly subsample the dataset to at most this many points
+            before writing.  The same random seed (42) is always used so the
+            output is reproducible.
+        include_compositions : bool
+            Write individual ``x0`` … ``x4`` scalar fields (default ``True``).
+            Set to ``False`` to reduce file size.
+
+        Returns
+        -------
+        str
+            Absolute path of the written file.
+
+        Examples
+        --------
+        ::
+
+            diag.save_vtk('phase_diagram.vtu')
+            diag.save_vtk('phase_diagram_small.vtu', max_points=200_000)
+        """
+
+        # ── Prepare data ──────────────────────────────────────────────────
+        data = self.data.copy()   # (N, 6)
+        stab = (self._stability_data.copy()
+                if self._stability_data is not None else None)
+
+        if max_points is not None and len(data) > max_points:
+            rng = np.random.default_rng(42)
+            idx = rng.choice(len(data), size=max_points, replace=False)
+            data = data[idx]
+            if stab is not None:
+                stab = stab[idx]
+
+        N = len(data)
+        x0c = data[:, 0]
+        x1c = data[:, 1]
+        x2c = data[:, 2]
+        x3c = data[:, 3]
+        x4c = data[:, 4]
+        vals = data[:, 5]
+
+        # ── Natural embedding ─────────────────────────────────────────────
+        pts = (
+            x1c[:, None] * VERTICES[0]
+            + x2c[:, None] * VERTICES[1]
+            + x3c[:, None] * VERTICES[2]
+            + x4c[:, None] * VERTICES[3]
+        )  # (N, 3)
+        xyz = np.ascontiguousarray(pts, dtype=np.float32)
+
+        # ── VTK base64 binary helper ──────────────────────────────────────
+        def _b64(arr: np.ndarray) -> str:
+            """Encode array as VTK inline binary (UInt32 byte-count header)."""
+            raw    = np.ascontiguousarray(arr).tobytes()
+            header = np.array(len(raw), dtype=np.uint32).tobytes()
+            return base64.b64encode(header + raw).decode("ascii")
+
+        _vtk_dtype = {
+            np.dtype("float32"): "Float32",
+            np.dtype("float64"): "Float64",
+            np.dtype("int8"):    "Int8",
+            np.dtype("int16"):   "Int16",
+            np.dtype("int32"):   "Int32",
+            np.dtype("int64"):   "Int64",
+            np.dtype("uint8"):   "UInt8",
+        }
+
+        def _dtype_str(arr: np.ndarray) -> str:
+            return _vtk_dtype.get(arr.dtype, "Float32")
+
+        # ── Cell arrays (one VTK_VERTEX per point) ────────────────────────
+        connectivity = np.arange(N, dtype=np.int32)
+        offsets      = np.arange(1, N + 1, dtype=np.int32)
+        cell_types   = np.ones(N, dtype=np.uint8)   # VTK_VERTEX = 1
+
+        # ── Scalar fields ─────────────────────────────────────────────────
+        value_name = self.value_label if self.value_label else "value"
+        scalars: Dict[str, np.ndarray] = {
+            value_name: vals.astype(np.float32),
+        }
+        if include_compositions:
+            scalars["x0"] = x0c.astype(np.float32)
+            scalars["x1"] = x1c.astype(np.float32)
+            scalars["x2"] = x2c.astype(np.float32)
+            scalars["x3"] = x3c.astype(np.float32)
+            scalars["x4"] = x4c.astype(np.float32)
+        if stab is not None:
+            scalars["stability"] = stab.astype(np.int8)
+
+        # ── Build VTK XML ─────────────────────────────────────────────────
+        lines = [
+            '<?xml version="1.0"?>',
+            '<VTKFile type="UnstructuredGrid" version="0.1"'
+            ' byte_order="LittleEndian" header_type="UInt32">',
+            "  <UnstructuredGrid>",
+            f'    <Piece NumberOfPoints="{N}" NumberOfCells="{N}">',
+            "      <Points>",
+            '        <DataArray type="Float32" NumberOfComponents="3"'
+            ' format="binary">',
+            f"          {_b64(xyz)}",
+            "        </DataArray>",
+            "      </Points>",
+            "      <Cells>",
+            '        <DataArray type="Int32" Name="connectivity"'
+            ' format="binary">',
+            f"          {_b64(connectivity)}",
+            "        </DataArray>",
+            '        <DataArray type="Int32" Name="offsets"'
+            ' format="binary">',
+            f"          {_b64(offsets)}",
+            "        </DataArray>",
+            '        <DataArray type="UInt8" Name="types"'
+            ' format="binary">',
+            f"          {_b64(cell_types)}",
+            "        </DataArray>",
+            "      </Cells>",
+            f'      <PointData Scalars="{value_name}">',
+        ]
+        for name, arr in scalars.items():
+            lines += [
+                f'        <DataArray type="{_dtype_str(arr)}"'
+                f' Name="{name}" format="binary">',
+                f"          {_b64(arr)}",
+                "        </DataArray>",
+            ]
+        lines += [
+            "      </PointData>",
+            "    </Piece>",
+            "  </UnstructuredGrid>",
+            "</VTKFile>",
+        ]
+
+        with open(output_path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+        abs_path = os.path.abspath(output_path)
+        print(f"VTK export: {N:,} points → {abs_path}")
+        return abs_path

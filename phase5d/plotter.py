@@ -15,6 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3D projectio
 from .colormap import (
     DEFAULT_PHASE_ALPHAS,
     DEFAULT_PHASE_COLORS,
+    combined_colors,
     continuous_colors,
     make_scalar_mappable,
     phase_stability_colors,
@@ -28,7 +29,6 @@ from .geometry import (
 )
 from .utils import (
     compute_x0,
-    downsample,
     extract_x0_slice,
     validate_data,
     x0_grid,
@@ -82,6 +82,23 @@ class PhaseDiagram5D:
 
         Default: ``['x₀', 'x₁', 'x₂', 'x₃', 'x₄']``.
 
+    stability_data : array-like of int, shape (N,), or None
+        Optional array of phase stability labels (-1, 0, 1), one per row in
+        *data*.  Only used when ``value_type='continuous'``.  When provided,
+        enables **combined mode**: color is taken from the continuous value
+        (Gm, Hmr, …) while *alpha* is controlled by the stability label —
+        stable regions stay invisible, meta-stable regions are
+        semi-transparent, and unstable regions are fully opaque.
+
+        Example::
+
+            diag = PhaseDiagram5D(
+                data_gm,
+                value_type='continuous',
+                stability_data=phase_labels,
+                component_labels=['Fe', 'Mn', 'Ni', 'Co', 'Cu'],
+            )
+
     phase_colors : dict or None
         Override default RGB colors for stability labels.
         Keys: -1, 0, 1 → (R, G, B) tuples in [0, 1].
@@ -101,6 +118,7 @@ class PhaseDiagram5D:
         vmax: Optional[float] = None,
         tolerance: float = 0.005,
         component_labels: Optional[List[str]] = None,
+        stability_data=None,
         phase_colors: Optional[Dict[int, Tuple[float, float, float]]] = None,
         phase_alphas: Optional[Dict[int, float]] = None,
     ):
@@ -124,21 +142,65 @@ class PhaseDiagram5D:
         self._phase_colors = {**DEFAULT_PHASE_COLORS, **(phase_colors or {})}
         self._phase_alphas = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
 
+        # Optional stability mask for combined rendering
+        if stability_data is not None:
+            stab = np.asarray(stability_data, dtype=int).ravel()
+            if len(stab) != len(self.data):
+                raise ValueError(
+                    f"stability_data length ({len(stab)}) must match data "
+                    f"length ({len(self.data)})."
+                )
+            if not np.all(np.isin(stab, [-1, 0, 1])):
+                raise ValueError(
+                    "stability_data must contain only -1 (unstable), "
+                    "0 (meta-stable), or 1 (stable)."
+                )
+            self._stability_data: Optional[np.ndarray] = stab
+        else:
+            self._stability_data = None
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _map_colors(self, values: np.ndarray, alpha: float) -> np.ndarray:
-        """Return RGBA array for *values* according to value_type."""
+    def _map_colors(
+        self,
+        values: np.ndarray,
+        alpha: float,
+        stability: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        """Return RGBA array for *values* according to value_type.
+
+        Parameters
+        ----------
+        values : np.ndarray
+            Value column for the current slice.
+        alpha : float
+            Uniform alpha used in pure continuous mode.
+        stability : np.ndarray or None
+            Stability labels for the current slice.  When provided together
+            with value_type='continuous', triggers combined rendering.
+        """
         if self.value_type == "continuous":
-            rgba, _, _ = continuous_colors(
-                values,
-                cmap=self.colormap,
-                vmin=self.vmin,
-                vmax=self.vmax,
-                alpha=alpha,
-            )
-        else:
+            if stability is not None:
+                # Combined: hue from continuous value, alpha from stability
+                rgba, _, _ = combined_colors(
+                    values,
+                    stability,
+                    cmap=self.colormap,
+                    vmin=self.vmin,
+                    vmax=self.vmax,
+                    phase_alphas=self._phase_alphas,
+                )
+            else:
+                rgba, _, _ = continuous_colors(
+                    values,
+                    cmap=self.colormap,
+                    vmin=self.vmin,
+                    vmax=self.vmax,
+                    alpha=alpha,
+                )
+        else:  # 'phase_stability'
             rgba = phase_stability_colors(
                 values,
                 phase_colors=self._phase_colors,
@@ -332,16 +394,31 @@ class PhaseDiagram5D:
             self._draw_wireframe(ax3d, x0, mode, wireframe_alpha, wireframe_color)
 
         # Data points  (internal format: [x0, x1, x2, x3, x4, value])
-        slice_data = extract_x0_slice(self.data, x0, self.tolerance)
+        # Compute the x0 mask directly so we can apply it to stability_data too
+        x0_mask = np.abs(self.data[:, 0] - x0) <= self.tolerance
+        slice_data = self.data[x0_mask]
+        stab_slice = (
+            self._stability_data[x0_mask]
+            if self._stability_data is not None
+            else None
+        )
+
         if len(slice_data) > 0:
-            slice_data = downsample(slice_data, max_points)
+            # Downsample — apply the same random indices to both arrays
+            if len(slice_data) > max_points:
+                rng = np.random.default_rng(42)
+                idx = rng.choice(len(slice_data), size=max_points, replace=False)
+                slice_data = slice_data[idx]
+                if stab_slice is not None:
+                    stab_slice = stab_slice[idx]
+
             x1, x2, x3, x4 = (slice_data[:, k] for k in range(1, 5))
             values = slice_data[:, 5]
 
             pts = compositions_to_cartesian(x1, x2, x3, x4, x0=x0, mode=mode)
-            rgba = self._map_colors(values, alpha=alpha)
+            rgba = self._map_colors(values, alpha=alpha, stability=stab_slice)
 
-            # For phase_stability, skip fully-transparent (stable) points
+            # Skip fully-transparent points (stable in any mode)
             visible = rgba[:, 3] > 1e-3
             if visible.any():
                 ax3d.scatter(
@@ -371,6 +448,9 @@ class PhaseDiagram5D:
         # Legend / colorbar
         if self.value_type == "continuous":
             self._add_colorbar(fig)
+            if self._stability_data is not None:
+                # Combined mode: also show stability alpha legend
+                self._add_phase_legend(fig)
         else:
             self._add_phase_legend(fig)
 

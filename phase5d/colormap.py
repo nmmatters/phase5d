@@ -94,6 +94,55 @@ def phase_stability_colors(
     return rgba
 
 
+def combined_colors(
+    continuous_values: np.ndarray,
+    phase_labels: np.ndarray,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    phase_alphas: Optional[Dict[int, float]] = None,
+) -> Tuple[np.ndarray, mcolors.Normalize, object]:
+    """
+    Map scalar values to colors while using phase stability labels to set alpha.
+
+    This is the "combined" rendering mode: the *hue* encodes a continuous
+    property (e.g. Gibbs energy) and the *opacity* encodes phase stability —
+    stable regions stay invisible, meta-stable regions are semi-transparent,
+    and unstable regions are fully opaque.  This lets you see both *where*
+    the instability boundary sits and *how deep* the energy well is.
+
+    Parameters
+    ----------
+    continuous_values : array-like, shape (N,)
+        Scalar property (Gm, Hmr, …) used to pick colors from the colormap.
+    phase_labels : array-like, shape (N,)
+        Stability labels: -1 (unstable), 0 (meta-stable), 1 (stable).
+    cmap : matplotlib colormap name
+    vmin, vmax : color-scale limits (defaults to data min/max).
+    phase_alphas : dict or None
+        Override default alpha per stability label.
+
+    Returns
+    -------
+    colors : np.ndarray, shape (N, 4)  RGBA in [0, 1]
+    norm   : matplotlib Normalize instance
+    cm     : matplotlib colormap
+    """
+    continuous_values = np.asarray(continuous_values, dtype=float)
+    phase_labels = np.asarray(phase_labels, dtype=int)
+
+    # Get hue from continuous colormap (alpha ignored here — set below)
+    rgba, norm, cm = continuous_colors(continuous_values, cmap, vmin, vmax, alpha=1.0)
+
+    # Override alpha from stability labels
+    alphas_map = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
+    for label in (-1, 0, 1):
+        mask = phase_labels == label
+        rgba[mask, 3] = alphas_map[label]
+
+    return rgba, norm, cm
+
+
 def make_scalar_mappable(
     cmap: str,
     vmin: float,

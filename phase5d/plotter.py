@@ -321,18 +321,28 @@ class PhaseDiagram5D:
         pts: np.ndarray,
         rgba: np.ndarray,
         marker_size: float,
+        **kwargs,
     ) -> None:
-        """Render data points as a scatter plot (default render mode)."""
+        """Render data points as a scatter plot (default render mode).
+
+        *kwargs* are merged on top of the library defaults and forwarded to
+        ``Axes3D.scatter``, so any parameter accepted by that call can be
+        overridden (e.g. ``marker='^'``, ``edgecolors='k'``).
+        """
         visible = rgba[:, 3] > 1e-3
         if visible.any():
-            ax3d.scatter(
-                pts[visible, 0],
-                pts[visible, 1],
-                pts[visible, 2],
+            kw = dict(
                 c=rgba[visible],
                 s=marker_size,
                 depthshade=False,
                 linewidths=0,
+            )
+            kw.update(kwargs)   # user overrides win
+            ax3d.scatter(
+                pts[visible, 0],
+                pts[visible, 1],
+                pts[visible, 2],
+                **kw,
             )
 
     def _render_surface(
@@ -342,6 +352,7 @@ class PhaseDiagram5D:
         rgba: np.ndarray,
         values: np.ndarray,
         stability: Optional[np.ndarray],
+        **kwargs,
     ) -> None:
         """
         Render data as convex-hull surfaces, one hull per phase region.
@@ -354,6 +365,11 @@ class PhaseDiagram5D:
 
         Falls back silently to nothing on degenerate input (< 4 points or
         coplanar configuration).  Requires ``scipy >= 1.0``.
+
+        *kwargs* are merged on top of the library defaults and forwarded to
+        ``Poly3DCollection`` (e.g. ``edgecolor='white'``, ``linewidth=0.3``).
+        Note: ``facecolor`` is always controlled by the colormap / phase colors;
+        pass ``edgecolor`` or other non-color properties to customise the mesh.
         """
         try:
             from scipy.spatial import ConvexHull
@@ -395,8 +411,10 @@ class PhaseDiagram5D:
                     for s in hull.simplices
                 ])
 
-            poly = Poly3DCollection(triangles, edgecolor="none")
-            poly.set_facecolor(fcolors)
+            poly_kw = dict(edgecolor="none")
+            poly_kw.update(kwargs)   # user overrides win
+            poly = Poly3DCollection(triangles, **poly_kw)
+            poly.set_facecolor(fcolors)   # always driven by colormap/phase
             ax3d.add_collection3d(poly)
 
         if self.value_type == "phase_stability":
@@ -451,6 +469,7 @@ class PhaseDiagram5D:
         figsize: Tuple[float, float] = (8, 9),
         title: Optional[str] = None,
         dpi: int = 100,
+        **kwargs,
     ):
         """
         Render a single tetrahedron frame for a given x0 value.
@@ -507,6 +526,18 @@ class PhaseDiagram5D:
             Optional title for the 3-D axes.
         dpi : int
             Figure resolution.
+        **kwargs
+            Passed directly to the underlying matplotlib rendering call,
+            on top of the library's own defaults (user values take priority):
+
+            - ``render='scatter'`` → forwarded to ``Axes3D.scatter``
+              (e.g. ``marker='^'``, ``edgecolors='k'``, ``linewidths=0.5``).
+            - ``render='surface'`` → forwarded to ``Poly3DCollection``
+              (e.g. ``edgecolor='white'``, ``linewidth=0.2``).
+
+            These kwargs are also accepted by :meth:`save_frames` and
+            :meth:`create_video`, which forward all extra keyword arguments
+            through to this method.
 
         Returns
         -------
@@ -556,9 +587,9 @@ class PhaseDiagram5D:
             rgba = self._map_colors(values, alpha=alpha, stability=stab_slice)
 
             if render == "surface":
-                self._render_surface(ax3d, pts, rgba, values, stab_slice)
+                self._render_surface(ax3d, pts, rgba, values, stab_slice, **kwargs)
             else:  # 'scatter' (default)
-                self._render_scatter(ax3d, pts, rgba, marker_size)
+                self._render_scatter(ax3d, pts, rgba, marker_size, **kwargs)
 
         # Vertex labels
         if show_vertex_labels:
@@ -716,6 +747,7 @@ class PhaseDiagram5D:
         wireframe_color: str = "black",
         show_vertex_labels: bool = True,
         show_colorbar: bool = True,
+        **kwargs,
     ) -> Tuple[plt.Figure, Axes3D]:
         """
         Render one or more isosurfaces through the full 4-simplex composition space.
@@ -775,6 +807,12 @@ class PhaseDiagram5D:
             Label vertices with component names.
         show_colorbar : bool
             Add a colorbar (continuous value_type only).
+        **kwargs
+            Passed directly to ``Poly3DCollection`` for every isosurface mesh,
+            on top of the library defaults (user values take priority).
+            Useful for e.g. ``edgecolor='white'``, ``linewidth=0.2``, or
+            overriding ``alpha`` per call (though the *alpha* parameter above
+            is more convenient for that).
 
         Returns
         -------
@@ -935,12 +973,9 @@ class PhaseDiagram5D:
             verts[:, 1] += y_lo
             verts[:, 2] += z_lo
 
-            mesh = Poly3DCollection(
-                verts[faces],
-                alpha=alpha,
-                facecolor=color,
-                edgecolor="none",
-            )
+            mesh_kw = dict(alpha=alpha, facecolor=color, edgecolor="none")
+            mesh_kw.update(kwargs)   # user overrides win
+            mesh = Poly3DCollection(verts[faces], **mesh_kw)
             ax3d.add_collection3d(mesh)
 
         # ------------------------------------------------------------------ #

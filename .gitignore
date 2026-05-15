@@ -38,4 +38,8 @@ Thumbs.db
 # ffmpeg output / generated files
 *.mp4
 *.png
+*.vtu
 frames/
+
+# Ad-hoc test / scratch scripts at repo root
+test_*.py

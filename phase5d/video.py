@@ -159,7 +159,7 @@ def assemble_video(
         raise ValueError("frame_paths is empty — nothing to assemble.")
 
     if verbose:
-        print(f"Assembling {len(frame_paths)} frames → {output_path}  (fps={fps})")
+        print(f"Assembling {len(frame_paths)} frames -> {output_path}  (fps={fps})")
 
     exe = _ffmpeg_exe()
 

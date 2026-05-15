@@ -695,7 +695,7 @@ class PhaseDiagram5D:
                 n_slice = len(extract_x0_slice(self.data, x0, self.tolerance))
                 print(
                     f"  [{i + 1:>{len(str(len(x0_values)))}}/{len(x0_values)}] "
-                    f"x0 = {x0:.3f}  ({n_slice} points)  → {path}"
+                    f"x0 = {x0:.3f}  ({n_slice} points)  -> {path}"
                 )
 
         return paths
@@ -1382,5 +1382,5 @@ class PhaseDiagram5D:
             fh.write("\n".join(lines) + "\n")
 
         abs_path = os.path.abspath(output_path)
-        print(f"VTK export: {N:,} points → {abs_path}")
+        print(f"VTK export: {N:,} points -> {abs_path}")
         return abs_path

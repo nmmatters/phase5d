@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phase5d"
+version = "0.1.0"
+description = "5D phase diagram visualization for high-entropy alloys"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Niklas Marschall" }]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[project.urls]
+Repository = "https://github.com/nmarschall/phase5d"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["phase5d*"]

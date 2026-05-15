@@ -42,25 +42,50 @@ class PhaseDiagram5D:
 
     Parameters
     ----------
-    data : array-like, shape (N, 5)
-        Columns: [x1, x2, x3, x4, value].
-        x0 is implicit: x0 = 1 - x1 - x2 - x3 - x4.
+    data : array-like
+        Composition + value array.  The expected shape depends on *x0*:
+
+        ``x0='implicit'`` (default) — shape **(N, 5)**,
+        columns ``[x1, x2, x3, x4, value]``.
+        x0 is computed internally as ``1 - x1 - x2 - x3 - x4``.
+
+        ``x0='explicit'`` — shape **(N, 6)**,
+        columns ``[x0, x1, x2, x3, x4, value]``.
+        The dependent coordinate is taken directly from the first column.
+
+    x0 : {'implicit', 'explicit'}
+        Declares whether the dependent composition coordinate x0 is
+        already included in *data* or should be derived from the others.
+        Default: ``'implicit'``.
+
     value_type : {'continuous', 'phase_stability'}
         How to interpret the value column.
-        - 'continuous'      : scalar property (Gibbs energy, enthalpy, …)
-        - 'phase_stability' : integer labels -1 / 0 / 1
+        - ``'continuous'``      : scalar property (Gibbs energy, enthalpy, …)
+        - ``'phase_stability'`` : integer labels -1 / 0 / 1
+
     colormap : str
-        Matplotlib colormap for continuous values (default 'viridis').
+        Matplotlib colormap for continuous values (default ``'viridis'``).
+
     vmin, vmax : float or None
         Color-scale limits for continuous values.  Defaults to data min/max.
+
     tolerance : float
         Half-width of the x0 acceptance window when slicing (default 0.005).
+
     component_labels : list of 5 str or None
-        Names shown at vertices and in the scale bar.
-        Default: ['x₀', 'x₁', 'x₂', 'x₃', 'x₄'].
+        Names shown at tetrahedron vertices and in the x0 scale bar,
+        ordered ``[x0_label, x1_label, x2_label, x3_label, x4_label]``.
+
+        Example for a Fe-Mn-Ni-Co-Cu alloy::
+
+            component_labels=['Fe', 'Mn', 'Ni', 'Co', 'Cu']
+
+        Default: ``['x₀', 'x₁', 'x₂', 'x₃', 'x₄']``.
+
     phase_colors : dict or None
         Override default RGB colors for stability labels.
         Keys: -1, 0, 1 → (R, G, B) tuples in [0, 1].
+
     phase_alphas : dict or None
         Override default alpha values for stability labels.
         Keys: -1, 0, 1 → float in [0, 1].
@@ -69,6 +94,7 @@ class PhaseDiagram5D:
     def __init__(
         self,
         data,
+        x0: str = "implicit",
         value_type: str = "continuous",
         colormap: str = "viridis",
         vmin: Optional[float] = None,
@@ -81,14 +107,16 @@ class PhaseDiagram5D:
         if value_type not in ("continuous", "phase_stability"):
             raise ValueError("value_type must be 'continuous' or 'phase_stability'.")
 
-        self.data = validate_data(data)
+        # Internal storage is always (N, 6): [x0, x1, x2, x3, x4, value]
+        self.data = validate_data(data, x0=x0)
+        self.x0_mode = x0
         self.value_type = value_type
         self.colormap = colormap
         self.tolerance = tolerance
         self.component_labels = component_labels or ["x₀", "x₁", "x₂", "x₃", "x₄"]
 
-        # Continuous color limits
-        values = self.data[:, 4]
+        # Continuous color limits  (value is at column 5 in the (N,6) internal array)
+        values = self.data[:, 5]
         self.vmin = float(values.min()) if vmin is None else vmin
         self.vmax = float(values.max()) if vmax is None else vmax
 
@@ -303,12 +331,12 @@ class PhaseDiagram5D:
         if show_wireframe:
             self._draw_wireframe(ax3d, x0, mode, wireframe_alpha, wireframe_color)
 
-        # Data points
+        # Data points  (internal format: [x0, x1, x2, x3, x4, value])
         slice_data = extract_x0_slice(self.data, x0, self.tolerance)
         if len(slice_data) > 0:
             slice_data = downsample(slice_data, max_points)
-            x1, x2, x3, x4 = (slice_data[:, k] for k in range(4))
-            values = slice_data[:, 4]
+            x1, x2, x3, x4 = (slice_data[:, k] for k in range(1, 5))
+            values = slice_data[:, 5]
 
             pts = compositions_to_cartesian(x1, x2, x3, x4, x0=x0, mode=mode)
             rgba = self._map_colors(values, alpha=alpha)

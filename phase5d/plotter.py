@@ -903,13 +903,15 @@ class PhaseDiagram5D:
             (z_hi - z_lo) / max(grid_resolution - 1, 1),
         )
 
-        # Replace NaN with a sentinel below the data minimum so marching cubes
-        # treats the outside of the tetrahedron as "below any level"
+        # Replace NaN (outside the tetrahedron) with a sentinel ABOVE the data
+        # maximum.  This ensures the exterior always appears "above" every
+        # requested level, so marching_cubes finds only closed surfaces inside
+        # the tetrahedron and never generates spurious flat caps at its faces.
         valid_mask = ~np.isnan(grid_vals)
         if valid_mask.any():
-            sentinel = float(grid_vals[valid_mask].min()) - 1.0
+            sentinel = float(grid_vals[valid_mask].max()) + 1.0
         else:
-            sentinel = -1.0
+            sentinel = 1.0
         grid_filled = np.where(valid_mask, grid_vals, sentinel)
 
         for lev, color in zip(levels, color_list):

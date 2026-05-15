@@ -106,6 +106,25 @@ class PhaseDiagram5D:
     phase_alphas : dict or None
         Override default alpha values for stability labels.
         Keys: -1, 0, 1 → float in [0, 1].
+
+    value_label : str
+        Name of the quantity shown in the colorbar, e.g. ``'Gm'`` or
+        ``'Hmix'``.  Combined with *value_unit* as ``"label (unit)"``.
+
+    value_unit : str
+        Physical unit for the colorbar, e.g. ``'J/mol'`` or ``'kJ·mol⁻¹'``.
+        Can be supplied without *value_label* if only the unit is needed.
+
+        Example::
+
+            PhaseDiagram5D(
+                data_gm,
+                value_type='continuous',
+                colormap='RdBu_r',
+                component_labels=['Fe', 'Mn', 'Ni', 'Co', 'Cu'],
+                value_label='Gm',
+                value_unit='J/mol',
+            )
     """
 
     def __init__(
@@ -121,6 +140,8 @@ class PhaseDiagram5D:
         stability_data=None,
         phase_colors: Optional[Dict[int, Tuple[float, float, float]]] = None,
         phase_alphas: Optional[Dict[int, float]] = None,
+        value_label: str = "",
+        value_unit: str = "",
     ):
         if value_type not in ("continuous", "phase_stability"):
             raise ValueError("value_type must be 'continuous' or 'phase_stability'.")
@@ -137,6 +158,10 @@ class PhaseDiagram5D:
         values = self.data[:, 5]
         self.vmin = float(values.min()) if vmin is None else vmin
         self.vmax = float(values.max()) if vmax is None else vmax
+
+        # Colorbar label and unit
+        self.value_label = value_label
+        self.value_unit = value_unit
 
         # Phase stability colors / alphas
         self._phase_colors = {**DEFAULT_PHASE_COLORS, **(phase_colors or {})}
@@ -288,6 +313,16 @@ class PhaseDiagram5D:
         sm = make_scalar_mappable(self.colormap, self.vmin, self.vmax)
         cb = fig.colorbar(sm, cax=ax_cb)
         cb.ax.tick_params(labelsize=7)
+
+        # Build "Label (unit)" string from whatever the user supplied
+        if self.value_label or self.value_unit:
+            if self.value_label and self.value_unit:
+                cb_label = f"{self.value_label} ({self.value_unit})"
+            elif self.value_label:
+                cb_label = self.value_label
+            else:
+                cb_label = f"({self.value_unit})"
+            cb.set_label(cb_label, fontsize=8, labelpad=6)
 
     def _add_phase_legend(self, fig) -> None:
         labels = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}

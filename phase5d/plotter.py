@@ -312,6 +312,124 @@ class PhaseDiagram5D:
         )
 
     # ------------------------------------------------------------------
+    # Render helpers (called by plot_frame)
+    # ------------------------------------------------------------------
+
+    def _render_scatter(
+        self,
+        ax3d: Axes3D,
+        pts: np.ndarray,
+        rgba: np.ndarray,
+        marker_size: float,
+    ) -> None:
+        """Render data points as a scatter plot (default render mode)."""
+        visible = rgba[:, 3] > 1e-3
+        if visible.any():
+            ax3d.scatter(
+                pts[visible, 0],
+                pts[visible, 1],
+                pts[visible, 2],
+                c=rgba[visible],
+                s=marker_size,
+                depthshade=False,
+                linewidths=0,
+            )
+
+    def _render_surface(
+        self,
+        ax3d: Axes3D,
+        pts: np.ndarray,
+        rgba: np.ndarray,
+        values: np.ndarray,
+        stability: Optional[np.ndarray],
+    ) -> None:
+        """
+        Render data as convex-hull surfaces, one hull per phase region.
+
+        For ``value_type='phase_stability'`` a separate hull is drawn for each
+        stability class (unstable and meta-stable; stable is invisible).
+        For ``value_type='continuous'`` (with or without combined stability
+        masking) the hull faces are colored by the mean scalar value of their
+        three vertices, taken from the diagram's colormap.
+
+        Falls back silently to nothing on degenerate input (< 4 points or
+        coplanar configuration).  Requires ``scipy >= 1.0``.
+        """
+        try:
+            from scipy.spatial import ConvexHull
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        except ImportError as exc:
+            raise ImportError(
+                "render='surface' requires scipy.  "
+                "Install it with:  pip install scipy"
+            ) from exc
+
+        import matplotlib.cm as _mcm
+        import matplotlib.colors as _mcolors
+
+        cm = _mcm.get_cmap(self.colormap)
+        norm = _mcolors.Normalize(vmin=self.vmin, vmax=self.vmax)
+
+        def _add_hull(sub_pts, sub_vals, face_alpha, solid_color=None):
+            """
+            Compute ConvexHull of *sub_pts*, build a Poly3DCollection, and
+            add it to ax3d.
+
+            If *solid_color* is given (RGB tuple) every face gets that color.
+            Otherwise face colors are derived from *sub_vals* via the colormap.
+            """
+            if len(sub_pts) < 4:
+                return
+            try:
+                hull = ConvexHull(sub_pts)
+            except Exception:
+                return
+            triangles = [sub_pts[s] for s in hull.simplices]
+
+            if solid_color is not None:
+                r, g, b = solid_color
+                fcolors = np.tile([r, g, b, face_alpha], (len(hull.simplices), 1))
+            else:
+                fcolors = np.array([
+                    [*cm(norm(sub_vals[s].mean()))[:3], face_alpha]
+                    for s in hull.simplices
+                ])
+
+            poly = Poly3DCollection(triangles, edgecolor="none")
+            poly.set_facecolor(fcolors)
+            ax3d.add_collection3d(poly)
+
+        if self.value_type == "phase_stability":
+            # values column IS the stability label; one hull per class
+            for label in (-1, 0):          # label 1 = stable = invisible
+                a = self._phase_alphas[label]
+                if a < 1e-3:
+                    continue
+                mask = values.astype(int) == label
+                if mask.sum() < 4:
+                    continue
+                _add_hull(pts[mask], None, a, solid_color=self._phase_colors[label])
+
+        elif stability is not None:
+            # Combined mode: group by stability, colormap hue from values
+            for label in (-1, 0):
+                a = self._phase_alphas[label]
+                if a < 1e-3:
+                    continue
+                mask = stability == label
+                if mask.sum() < 4:
+                    continue
+                _add_hull(pts[mask], values[mask], a)
+
+        else:
+            # Pure continuous: one hull for all visible points
+            visible = rgba[:, 3] > 1e-3
+            if visible.sum() < 4:
+                return
+            mean_alpha = float(rgba[visible, 3].mean())
+            _add_hull(pts[visible], values[visible], mean_alpha)
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -319,6 +437,7 @@ class PhaseDiagram5D:
         self,
         x0: float,
         mode: str = "fixed",
+        render: str = "scatter",
         fig=None,
         alpha: float = 0.65,
         marker_size: float = 3,
@@ -346,6 +465,21 @@ class PhaseDiagram5D:
                                 shown via the bar below (recommended).
             - 'shrink_center' : tetrahedron shrinks toward its centroid.
             - 'shrink_corner' : tetrahedron shrinks toward the pure-x0 corner.
+        render : {'scatter', 'surface'}
+            Rendering style for the data points in this slice:
+
+            - ``'scatter'`` *(default)* — each composition point is drawn as
+              an individual marker.  Fast and faithful to the raw data
+              distribution; ``marker_size`` and ``max_points`` apply.
+
+            - ``'surface'`` — the convex hull of each phase region is rendered
+              as a solid (or semi-transparent) polygon mesh.  For
+              ``value_type='phase_stability'`` a separate hull is built for
+              each stability class.  For ``value_type='continuous'`` (or
+              combined mode) hull faces are colored by the mean scalar value
+              of their vertices, taken from the diagram colormap.
+              Requires ``scipy``.
+
         fig : matplotlib Figure or None
             Re-use an existing figure if provided; otherwise a new one is created.
         alpha : float
@@ -353,9 +487,10 @@ class PhaseDiagram5D:
             For phase_stability the per-phase alphas defined at construction are
             used instead.
         marker_size : float
-            Scatter marker size in points².
+            Scatter marker size in points² (``render='scatter'`` only).
         max_points : int
             Maximum number of data points to render (random sub-sample if exceeded).
+            Applied before both scatter and surface rendering.
         show_wireframe : bool
             Draw the tetrahedron edges.
         wireframe_alpha : float
@@ -378,6 +513,8 @@ class PhaseDiagram5D:
         fig : matplotlib Figure
         ax  : mpl_toolkits.mplot3d.Axes3D
         """
+        if render not in ("scatter", "surface"):
+            raise ValueError("render must be 'scatter' or 'surface'.")
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
 
@@ -418,18 +555,10 @@ class PhaseDiagram5D:
             pts = compositions_to_cartesian(x1, x2, x3, x4, x0=x0, mode=mode)
             rgba = self._map_colors(values, alpha=alpha, stability=stab_slice)
 
-            # Skip fully-transparent points (stable in any mode)
-            visible = rgba[:, 3] > 1e-3
-            if visible.any():
-                ax3d.scatter(
-                    pts[visible, 0],
-                    pts[visible, 1],
-                    pts[visible, 2],
-                    c=rgba[visible],
-                    s=marker_size,
-                    depthshade=False,
-                    linewidths=0,
-                )
+            if render == "surface":
+                self._render_surface(ax3d, pts, rgba, values, stab_slice)
+            else:  # 'scatter' (default)
+                self._render_scatter(ax3d, pts, rgba, marker_size)
 
         # Vertex labels
         if show_vertex_labels:
@@ -568,3 +697,262 @@ class PhaseDiagram5D:
                 shutil.rmtree(_tmp_dir, ignore_errors=True)
 
         return os.path.abspath(output_path)
+
+    def plot_isosurface(
+        self,
+        level: Union[float, Sequence[float]],
+        colors: Union[str, Sequence] = "auto",
+        alpha: float = 0.5,
+        grid_resolution: int = 50,
+        max_points: int = 50000,
+        fig=None,
+        elev: float = 20,
+        azim: float = 45,
+        figsize: Tuple[float, float] = (8, 8),
+        title: Optional[str] = None,
+        dpi: int = 100,
+        show_wireframe: bool = True,
+        wireframe_alpha: float = 0.20,
+        wireframe_color: str = "black",
+        show_vertex_labels: bool = True,
+        show_colorbar: bool = True,
+    ) -> Tuple[plt.Figure, Axes3D]:
+        """
+        Render one or more isosurfaces through the full 4-simplex composition space.
+
+        Unlike :meth:`plot_frame`, which shows one x₀ slice at a time, this
+        method uses the **natural (barycentric) embedding**
+
+        .. code-block:: text
+
+            P = x₁·V₀ + x₂·V₁ + x₃·V₂ + x₄·V₃
+
+        to place every data point at a unique position inside the master
+        tetrahedron (x₀ is *not* normalised out).  A marching-cubes algorithm
+        then extracts the closed surface(s) where the value column equals
+        *level*, giving a true 3-D isosurface that spans all x₀ slices.
+
+        Requires ``scipy`` and ``scikit-image``::
+
+            pip install scipy scikit-image
+
+        Parameters
+        ----------
+        level : float or sequence of float
+            Value(s) at which to cut the isosurface.  Multiple levels can be
+            passed as a list; each gets its own color.
+        colors : 'auto' or sequence of color specs
+            Colors for each isosurface.  ``'auto'`` cycles through
+            ``matplotlib``'s ``tab10`` palette.  Otherwise supply one color
+            per level using any matplotlib color specification.
+        alpha : float
+            Surface transparency (0 = invisible, 1 = fully opaque).
+        grid_resolution : int
+            Number of voxels along each axis of the interpolation grid.
+            Higher values give smoother surfaces at the cost of memory and
+            time.  Default: 50.
+        max_points : int
+            Maximum number of data points used to build the
+            ``LinearNDInterpolator``.  A random subset is drawn when the
+            dataset is larger.  Default: 50 000.
+        fig : matplotlib Figure or None
+            Re-use an existing figure, or create a new one.
+        elev, azim : float
+            Camera elevation and azimuth (degrees).
+        figsize : (width, height)
+            Figure size in inches.
+        title : str or None
+            Optional axes title.
+        dpi : int
+            Figure resolution.
+        show_wireframe : bool
+            Draw the master tetrahedron wireframe.
+        wireframe_alpha : float
+            Wireframe transparency.
+        wireframe_color : str
+            Wireframe line color.
+        show_vertex_labels : bool
+            Label vertices with component names.
+        show_colorbar : bool
+            Add a colorbar (continuous value_type only).
+
+        Returns
+        -------
+        fig : matplotlib Figure
+        ax  : mpl_toolkits.mplot3d.Axes3D
+
+        Examples
+        --------
+        Single isosurface at Gm = -5 kJ/mol::
+
+            fig, ax = diagram.plot_isosurface(level=-5000)
+            fig.savefig('isosurface.png', dpi=150, bbox_inches='tight')
+
+        Multiple levels with custom colors::
+
+            fig, ax = diagram.plot_isosurface(
+                level=[-8000, -5000, -2000],
+                colors=['royalblue', 'gold', 'tomato'],
+                alpha=0.4,
+                grid_resolution=60,
+            )
+        """
+        try:
+            from scipy.interpolate import LinearNDInterpolator
+            from skimage.measure import marching_cubes
+        except ImportError as exc:
+            raise ImportError(
+                "plot_isosurface() requires scipy and scikit-image.  "
+                "Install them with:  pip install scipy scikit-image"
+            ) from exc
+
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        import matplotlib.cm as _mcm
+
+        # ------------------------------------------------------------------ #
+        # 1. Natural embedding: P = x1·V0 + x2·V1 + x3·V2 + x4·V3          #
+        #    Every composition maps to a UNIQUE 3-D position inside the       #
+        #    master tetrahedron (x0 is NOT normalised away).                  #
+        # ------------------------------------------------------------------ #
+        x1 = self.data[:, 1]
+        x2 = self.data[:, 2]
+        x3 = self.data[:, 3]
+        x4 = self.data[:, 4]
+        values = self.data[:, 5]
+
+        pts3d = (
+            x1[:, None] * VERTICES[0]
+            + x2[:, None] * VERTICES[1]
+            + x3[:, None] * VERTICES[2]
+            + x4[:, None] * VERTICES[3]
+        )  # shape (N, 3)
+
+        # ------------------------------------------------------------------ #
+        # 2. Downsample before building the interpolator                      #
+        # ------------------------------------------------------------------ #
+        N = len(pts3d)
+        if N > max_points:
+            rng = np.random.default_rng(42)
+            idx = rng.choice(N, size=max_points, replace=False)
+            pts3d_sub = pts3d[idx]
+            vals_sub = values[idx]
+        else:
+            pts3d_sub = pts3d
+            vals_sub = values
+
+        # ------------------------------------------------------------------ #
+        # 3. Build a LinearNDInterpolator on the 3-D scattered points         #
+        # ------------------------------------------------------------------ #
+        interp = LinearNDInterpolator(pts3d_sub, vals_sub, fill_value=np.nan)
+
+        # Bounding box of the master tetrahedron
+        x_lo, x_hi = float(VERTICES[:, 0].min()), float(VERTICES[:, 0].max())
+        y_lo, y_hi = float(VERTICES[:, 1].min()), float(VERTICES[:, 1].max())
+        z_lo, z_hi = float(VERTICES[:, 2].min()), float(VERTICES[:, 2].max())
+
+        gx = np.linspace(x_lo, x_hi, grid_resolution)
+        gy = np.linspace(y_lo, y_hi, grid_resolution)
+        gz = np.linspace(z_lo, z_hi, grid_resolution)
+        GX, GY, GZ = np.meshgrid(gx, gy, gz, indexing="ij")
+        grid_pts = np.column_stack([GX.ravel(), GY.ravel(), GZ.ravel()])
+
+        grid_vals = interp(grid_pts).reshape(
+            grid_resolution, grid_resolution, grid_resolution
+        )
+
+        # ------------------------------------------------------------------ #
+        # 4. Figure and axes setup                                             #
+        # ------------------------------------------------------------------ #
+        if fig is None:
+            fig = plt.figure(figsize=figsize, dpi=dpi)
+
+        ax3d: Axes3D = fig.add_axes([0.02, 0.02, 0.86, 0.96], projection="3d")
+        ax3d.view_init(elev=elev, azim=azim)
+        ax3d.set_axis_off()
+
+        if title:
+            ax3d.set_title(title, fontsize=12, pad=8)
+
+        # Wireframe uses shrink_corner at x0=0 → full tetrahedron = VERTICES
+        if show_wireframe:
+            self._draw_wireframe(
+                ax3d, x0=0.0, mode="shrink_corner",
+                wireframe_alpha=wireframe_alpha,
+                wireframe_color=wireframe_color,
+            )
+
+        if show_vertex_labels:
+            self._label_vertices(ax3d, mode="shrink_corner", x0=0.0)
+
+        # ------------------------------------------------------------------ #
+        # 5. Marching cubes for each requested level                           #
+        # ------------------------------------------------------------------ #
+        levels = [level] if np.isscalar(level) else list(level)
+
+        if colors == "auto":
+            cmap_tab = _mcm.get_cmap("tab10")
+            color_list = [cmap_tab(i % 10) for i in range(len(levels))]
+        else:
+            color_list = list(colors)
+            while len(color_list) < len(levels):
+                color_list.append(color_list[-1])
+
+        spacing = (
+            (x_hi - x_lo) / max(grid_resolution - 1, 1),
+            (y_hi - y_lo) / max(grid_resolution - 1, 1),
+            (z_hi - z_lo) / max(grid_resolution - 1, 1),
+        )
+
+        # Replace NaN with a sentinel below the data minimum so marching cubes
+        # treats the outside of the tetrahedron as "below any level"
+        valid_mask = ~np.isnan(grid_vals)
+        if valid_mask.any():
+            sentinel = float(grid_vals[valid_mask].min()) - 1.0
+        else:
+            sentinel = -1.0
+        grid_filled = np.where(valid_mask, grid_vals, sentinel)
+
+        for lev, color in zip(levels, color_list):
+            # Skip levels outside the actual data range
+            if valid_mask.any():
+                lo = float(grid_vals[valid_mask].min())
+                hi = float(grid_vals[valid_mask].max())
+                if not (lo < lev < hi):
+                    continue
+            try:
+                verts, faces, _, _ = marching_cubes(
+                    grid_filled,
+                    level=lev,
+                    spacing=spacing,
+                )
+            except Exception:
+                continue
+
+            # Shift vertices from voxel-space to world coordinates
+            verts[:, 0] += x_lo
+            verts[:, 1] += y_lo
+            verts[:, 2] += z_lo
+
+            mesh = Poly3DCollection(
+                verts[faces],
+                alpha=alpha,
+                facecolor=color,
+                edgecolor="none",
+            )
+            ax3d.add_collection3d(mesh)
+
+        # ------------------------------------------------------------------ #
+        # 6. Axis limits and legend/colorbar                                   #
+        # ------------------------------------------------------------------ #
+        buf = 0.12
+        ax3d.set_xlim(VERTICES[:, 0].min() - buf, VERTICES[:, 0].max() + buf)
+        ax3d.set_ylim(VERTICES[:, 1].min() - buf, VERTICES[:, 1].max() + buf)
+        ax3d.set_zlim(VERTICES[:, 2].min() - buf, VERTICES[:, 2].max() + buf)
+
+        if show_colorbar and self.value_type == "continuous":
+            self._add_colorbar(fig, ax_left=0.88)
+
+        if self.value_type == "phase_stability":
+            self._add_phase_legend(fig)
+
+        return fig, ax3d

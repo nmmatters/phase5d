@@ -37,13 +37,14 @@ The scale bar at the bottom of each frame encodes this information visually.
 
 ### Requirements
 
-| Package | Version |
-|---------|---------|
-| Python  | ≥ 3.9   |
-| NumPy   | ≥ 1.24  |
-| Matplotlib | ≥ 3.7 |
-| SciPy   | ≥ 1.10  |
-| **ffmpeg** | any (for video output) |
+| Package | Version | Notes |
+|---------|---------|-------|
+| Python  | ≥ 3.9   | |
+| NumPy   | ≥ 1.24  | |
+| Matplotlib | ≥ 3.7 | |
+| SciPy   | ≥ 1.10  | required for `render='surface'` and `plot_isosurface()` |
+| scikit-image | ≥ 0.19 | required for `plot_isosurface()` only |
+| **ffmpeg** | any | for video output |
 
 Install ffmpeg via your system package manager:
 
@@ -119,7 +120,9 @@ points equally.
 
 ## Visualization modes
 
-Three modes control how the tetrahedron is rendered as x₀ changes:
+### Tetrahedron scaling (`mode`)
+
+Three modes control how the tetrahedron is scaled as x₀ changes:
 
 | Mode | Description |
 |------|-------------|
@@ -129,6 +132,19 @@ Three modes control how the tetrahedron is rendered as x₀ changes:
 
 ```python
 fig, ax = pd5.plot_frame(x0=0.3, mode='shrink_center')
+```
+
+### Render style (`render`)
+
+Two rendering styles are available for the data points in each x₀ slice:
+
+| Style | Description |
+|-------|-------------|
+| `'scatter'` **(default)** | Each composition point is a marker. Fast and faithful to the raw data distribution. |
+| `'surface'` | The convex hull of each phase region is rendered as a polygon mesh. One hull per stability class for `phase_stability`; hull faces colored by the scalar value for `continuous` mode. Requires `scipy`. |
+
+```python
+fig, ax = pd5.plot_frame(x0=0.3, render='surface')
 ```
 
 ---
@@ -190,7 +206,8 @@ PhaseDiagram5D(
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `x0` | — | x₀ slice value |
-| `mode` | `'fixed'` | Scaling mode |
+| `mode` | `'fixed'` | Tetrahedron scaling mode |
+| `render` | `'scatter'` | `'scatter'` or `'surface'` |
 | `alpha` | `0.65` | Point alpha (continuous only) |
 | `marker_size` | `3` | Scatter marker size (pt²) |
 | `max_points` | `15000` | Max points rendered (random sub-sample) |
@@ -203,6 +220,42 @@ PhaseDiagram5D(
 | `dpi` | `100` | Figure resolution |
 
 Returns `(fig, ax)`.
+
+#### `.plot_isosurface(level, …)`
+
+Render one or more isosurfaces through the **full** 4-simplex composition space
+using the natural barycentric embedding
+`P = x₁·V₀ + x₂·V₁ + x₃·V₂ + x₄·V₃`.
+A `LinearNDInterpolator` builds a continuous scalar field from the scattered
+data; `marching_cubes` (scikit-image) extracts the surface(s).
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `level` | — | Isosurface value(s) — float or list of floats |
+| `colors` | `'auto'` | Colors per level; `'auto'` uses `tab10` |
+| `alpha` | `0.5` | Surface transparency |
+| `grid_resolution` | `50` | Voxels per axis for interpolation grid |
+| `max_points` | `50000` | Max points used for interpolation |
+| `show_wireframe` | `True` | Draw master tetrahedron wireframe |
+| `show_colorbar` | `True` | Add colorbar (continuous mode) |
+| `elev`, `azim` | `20`, `45` | Camera angles (°) |
+| `figsize` | `(8, 8)` | Figure size (inches) |
+
+Returns `(fig, ax)`.
+
+```python
+# Single isosurface
+fig, ax = pd5.plot_isosurface(level=-5000)
+
+# Multiple levels with custom colors
+fig, ax = pd5.plot_isosurface(
+    level=[-8000, -5000, -2000],
+    colors=['royalblue', 'gold', 'tomato'],
+    alpha=0.4,
+    grid_resolution=60,
+)
+fig.savefig('isosurfaces.png', dpi=150, bbox_inches='tight')
+```
 
 #### `.save_frames(x0_values, output_dir, dpi=150, verbose=True, **plot_kwargs)`
 
@@ -266,3 +319,13 @@ python examples/example_phase_stability.py
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## Built with Claude Code
+
+This library was developed with the assistance of
+[Claude Code](https://claude.ai/claude-code) — Anthropic's agentic coding
+tool.  Claude Code was used throughout the design and implementation process,
+including the coordinate geometry, color-mapping pipeline, isosurface
+algorithm, and documentation.

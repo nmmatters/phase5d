@@ -80,7 +80,7 @@ from phase5d.utils import generate_grid_data
 #    shape (N, 5):  columns = [x1, x2, x3, x4, value]
 #    x0 is implicit:  x0 = 1 − x1 − x2 − x3 − x4
 
-data = generate_grid_data(step=0.05)   # synthetic example
+data = generate_grid_data(step=0.01)   # synthetic example
 
 # 2. Create diagram object  ──────────────────────────────────────────────────
 pd5 = PhaseDiagram5D(data, value_type='continuous', colormap='viridis')

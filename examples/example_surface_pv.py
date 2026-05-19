@@ -98,7 +98,7 @@ pd5 = PhaseDiagram5D(
          0: (0.75, 0.75, 0.75),   # light gray — meta-stable
          1: (1.00, 1.00, 1.00),   # white      — stable (transparent)
     },
-    phase_alphas={-1: 0.90, 0: 0.40, 1: 0.0},
+    phase_alphas={-1: 0.45, 0: 0.40, 1: 0.0},
     tolerance=0.005,
 )
 

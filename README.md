@@ -353,8 +353,36 @@ Renders a single high-quality surface frame off-screen and saves it as a PNG.
 | `show_vertex_labels` | `True` | Label vertices with component names |
 | `max_points` | `50000` | Max points for continuous mode (no effect on phase_stability) |
 | `min_points` | `500` | Min slice points to attempt surface rendering; below threshold renders wireframe only |
+| `markers` | `None` | List of `[x0,x1,x2,x3,x4]` compositions shown as spheres when the frame's x₀ matches within `tolerance` |
+| `tielines` | `None` | List of endpoint pairs `[[x0_A,…],[x0_B,…]]`; the tie-line's intersection with the current x₀ plane is shown as a sphere |
+| `marker_color` | `'red'` | Color of marker / tieline spheres |
+| `marker_size` | `18` | Sphere point size in PyVista units |
 
 Returns the total number of points in the slice.
+
+**Markers and tie-lines example** (nominal composition + two-phase equilibrium):
+
+```python
+NOMINAL = [0.20, 0.10, 0.20, 0.20, 0.30]   # Fe₂₀Mn₁₀Ni₂₀Co₂₀Cu₃₀
+PHASE_A = [0.22, 0.21, 0.21, 0.21, 0.15]   # equilibrium phase A (76 %)
+PHASE_B = [0.00, 0.07, 0.06, 0.01, 0.86]   # equilibrium phase B (24 %)
+
+# Single frame at the nominal composition
+pd5.save_frame_surface(
+    x0=0.20, out_path='frame_nominal.png',
+    markers=[NOMINAL],
+    tielines=[[PHASE_A, PHASE_B]],
+)
+
+# Video sweep over the tie-line window
+pd5.create_video(
+    x0_values=np.round(np.arange(0.00, 0.23, 0.01), 3),
+    output_path='tieline_window.mp4',
+    fps=3, render='surface',
+    markers=[NOMINAL],
+    tielines=[[PHASE_A, PHASE_B]],
+)
+```
 
 #### `.plot_isosurface(level, …)`
 

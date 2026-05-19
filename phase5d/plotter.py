@@ -773,6 +773,10 @@ class PhaseDiagram5D:
         show_vertex_labels: bool = True,
         max_points: int = 50000,
         min_points: int = 500,
+        markers=None,
+        tielines=None,
+        marker_color: str = "red",
+        marker_size: int = 18,
     ) -> int:
         """
         Render a single surface frame via PyVista and save it as a PNG.
@@ -821,6 +825,37 @@ class PhaseDiagram5D:
             only the tetrahedron wireframe and vertex labels are drawn (no
             phase surfaces).  This prevents artefacts at Fe-rich compositions
             where the composition space becomes very sparse.  Default: 500.
+        markers : list of array-like or None
+            Fixed composition points to highlight as red spheres.  Each entry
+            is a length-5 sequence ``[x0, x1, x2, x3, x4]``.  A sphere is
+            drawn only when the marker's x0 coordinate is within *tolerance*
+            of the current frame's x0.
+
+            Example — nominal alloy composition::
+
+                markers=[[0.20, 0.10, 0.20, 0.20, 0.30]]
+
+        tielines : list of pairs or None
+            Equilibrium tie-lines to visualise.  Each entry is a pair of
+            length-5 endpoints ``[[x0_A, x1_A, …], [x0_B, x1_B, …]]``
+            representing the two equilibrium phases.  The library linearly
+            interpolates along the tie-line to find the intersection with
+            the current x0 plane and draws a sphere there::
+
+                P(t) = A + t*(B - A),   t = (x0 - x0_A) / (x0_B - x0_A)
+
+            A sphere is shown when the tie-line crosses the current frame's
+            x0 plane (within *tolerance* at either end).
+
+            Example — two-phase equilibrium::
+
+                tielines=[[[0.22, 0.21, 0.21, 0.21, 0.15],
+                            [0.00, 0.07, 0.06, 0.01, 0.86]]]
+
+        marker_color : str
+            Color of marker / tieline spheres (default ``'red'``).
+        marker_size : int
+            Point size of the rendered spheres in PyVista units (default 18).
 
         Returns
         -------
@@ -972,6 +1007,51 @@ class PhaseDiagram5D:
                 loc="lower left",
             )
 
+        # ── markers & tielines ────────────────────────────────────────────
+        # Collect all 3-D points to render as coloured spheres this frame.
+        _marker_pts = []
+
+        # Fixed composition markers — shown when x0 matches within tolerance
+        if markers is not None:
+            for m in markers:
+                m = np.asarray(m, dtype=float)
+                if abs(m[0] - x0) <= self.tolerance:
+                    pt = compositions_to_cartesian(
+                        np.array([m[1]]), np.array([m[2]]),
+                        np.array([m[3]]), np.array([m[4]]),
+                        x0=x0, mode=mode,
+                    )
+                    _marker_pts.append(pt[0])
+
+        # Tieline markers — interpolate between the two equilibrium end-points
+        # and show the intersection with the current x0 plane as a sphere.
+        if tielines is not None:
+            for ends in tielines:
+                a = np.asarray(ends[0], dtype=float)   # [x0,x1,x2,x3,x4]
+                b = np.asarray(ends[1], dtype=float)
+                x0_a, x0_b = a[0], b[0]
+                lo, hi = min(x0_a, x0_b), max(x0_a, x0_b)
+                if lo - self.tolerance <= x0 <= hi + self.tolerance:
+                    denom = x0_b - x0_a
+                    t = (x0 - x0_a) / denom if abs(denom) > 1e-9 else 0.5
+                    t = float(np.clip(t, 0.0, 1.0))
+                    interp = a + t * (b - a)
+                    pt = compositions_to_cartesian(
+                        np.array([interp[1]]), np.array([interp[2]]),
+                        np.array([interp[3]]), np.array([interp[4]]),
+                        x0=x0, mode=mode,
+                    )
+                    _marker_pts.append(pt[0])
+
+        if _marker_pts:
+            cloud = pv.PolyData(np.array(_marker_pts))
+            pl.add_mesh(
+                cloud,
+                color=marker_color,
+                point_size=marker_size,
+                render_points_as_spheres=True,
+            )
+
         pl.screenshot(out_path, transparent_background=False)
         pl.close()
         return n_total
@@ -1025,7 +1105,8 @@ class PhaseDiagram5D:
                 # PyVista path — extract relevant kwargs, write PNG directly
                 pv_keys = ("mode", "shape_alpha", "window_size",
                            "camera_position", "show_wireframe",
-                           "show_vertex_labels", "max_points", "min_points")
+                           "show_vertex_labels", "max_points", "min_points",
+                           "markers", "tielines", "marker_color", "marker_size")
                 pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
                 n_slice = self.save_frame_surface(x0, path, **pv_kw)
             else:

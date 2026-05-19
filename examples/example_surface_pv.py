@@ -107,16 +107,16 @@ print("Rendering single PyVista frame (x0=0.30) ...")
 t1 = time.time()
 n  = pd5.save_frame_surface(
     x0=0.30,
-    out_path=os.path.join(OUT_DIR, "femnnicopha_pv_x0_0.30.png"),
+    out_path=os.path.join(OUT_DIR, "femnnicocu_pv_x0_0.30.png"),
     # shape_alpha is adaptive by default (90 * (N/62196)^(1/3))
     # Pass shape_alpha=<value> to override, e.g. shape_alpha=90
 )
 print(f"  {n:,} points  ({time.time()-t1:.1f}s)")
-print(f"  Saved: {os.path.join(OUT_DIR, 'femnnicopha_pv_x0_0.30.png')}")
+print(f"  Saved: {os.path.join(OUT_DIR, 'femnnicocu_pv_x0_0.30.png')}")
 
 # ── PyVista video: x(Fe) = 0.00 -> 0.40, step=0.01 ──────────────────────────
 # This range covers the richest part of the phase diagram where all three
-# stability classes coexist.  The full 0->1 sweep takes ~30-40 min on a
+# stability classes coexist.  The full 0->1 sweep takes ~15-20 min on a
 # modern desktop; see README for details on render time.
 print("\nRendering PyVista video  x(Fe) = 0.00 -> 0.40, step=0.01 ...")
 step   = 0.01 if using_real_data else 0.04
@@ -127,7 +127,7 @@ print(f"  {len(x0_values)} frames")
 t_video = time.time()
 video_path = pd5.create_video(
     x0_values=x0_values,
-    output_path=os.path.join(OUT_DIR, "femnnicopha_pv_surface.mp4"),
+    output_path=os.path.join(OUT_DIR, "femnnicocu_pv_surface.mp4"),
     fps=10,
     render="surface",
     verbose=True,

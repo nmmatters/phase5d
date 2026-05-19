@@ -11,10 +11,10 @@ then sweeping x₀ from 0 → 1 to produce a video of the complete phase space.
 
 ## Demo
 
-<video src="media/femnnicopha_surface_873k_full.mp4" width="100%" autoplay loop muted playsinline controls></video>
+<video src="media/femnnicocu_phase_stability_surface_873k_full.mp4" width="100%" autoplay loop muted playsinline controls></video>
 
-**FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0 % to 100 %
-in steps of 1 mol%.  Each frame is a cross-section of the four-component
+**FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0.00 to 1.00
+in steps of 0.01.  Each frame is a cross-section of the four-component
 (Mn–Ni–Co–Cu) composition space at fixed Fe content.
 
 | Color | Phase |
@@ -23,9 +23,8 @@ in steps of 1 mol%.  Each frame is a cross-section of the four-component
 | Light gray (semi-transparent) | Meta-stable |
 | Transparent | Stable single-phase region |
 
-The tetrahedron stays at full size throughout (`mode='fixed'`); the scale bar
-below shows the fraction of the composition space that is active.  Rendered
-with PyVista alpha-shape surfaces (`render='surface'`, adaptive alpha, 101 frames).
+Rendered with `render='surface'` (PyVista, adaptive alpha shapes, 101 frames,
+`mode='fixed'`).
 
 ---
 
@@ -46,7 +45,7 @@ x₀ = 0.40  →  60 % of the range remains
 x₀ = 1.00  →  single point      (pure Fe)
 ```
 
-The scale bar at the bottom of each frame encodes x₀ visually.
+Scatter frames include a scale bar below the tetrahedron that encodes x₀ visually.
 
 ---
 
@@ -80,7 +79,7 @@ winget install ffmpeg
 ### Install phase5d
 
 ```bash
-git clone https://github.com/nmarschall/phase5d.git
+git clone https://github.com/nmmatters/phase5d.git
 cd phase5d
 pip install -e .
 ```
@@ -144,7 +143,7 @@ Three modes control how the tetrahedron is scaled as x₀ changes:
 
 | Mode | Description |
 |------|-------------|
-| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. The scale is shown only via the bar. Easiest to read in a video. |
+| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. In scatter mode a scale bar shows x₀; surface mode shows only the tetrahedron. Easiest to read in a video. |
 | `'shrink_center'` | Tetrahedron shrinks by factor `(1−x₀)` around its centroid. |
 | `'shrink_corner'` | Tetrahedron shrinks toward the origin (pure-x₀ corner). |
 
@@ -474,7 +473,7 @@ See the [`examples/`](examples/) directory:
 | [`example_continuous.py`](examples/example_continuous.py) | Mixing enthalpy landscape, all three tetrahedron modes, scatter video |
 | [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, scatter + alpha-shape surface render, video |
 | [`example_isosurface.py`](examples/example_isosurface.py) | Isosurface rendering — single, nested, and rotated views |
-| [`example_surface_pv.py`](examples/example_surface_pv.py) | **Surface rendering** (`render='surface'`, PyVista) — FeMnNiCoCu at 873 K, x(Fe) 0→0.40 sweep. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
+| [`example_surface_pv.py`](examples/example_surface_pv.py) | **Surface rendering** (`render='surface'`, PyVista) — FeMnNiCoCu at 873 K, x(Fe) 0.00→0.40. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
 
 Run from the repository root:
 

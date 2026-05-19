@@ -64,18 +64,21 @@ fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close(fig)
 print(f"Saved: {out}")
 
-# ── Single frame: alpha-shape surface ─────────────────────────────────────────
-# render='surface' uses an alpha-shape (concave hull) per stability class.
-# shape_alpha is chosen adaptively by default; pass shape_alpha=<value> to fix.
-fig, ax = pd5.plot_frame(
-    x0=0.20, mode="fixed", render="surface",
-    elev=20, azim=50,
-    title="Phase stability (surface)  —  x0 = 0.20",
-)
-out = os.path.join(OUT_DIR, "stability_surface_x0_0.20.png")
-fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-plt.close(fig)
-print(f"Saved: {out}")
+# ── Single frame: PyVista surface ─────────────────────────────────────────────
+# save_frame_surface uses PyVista with an alpha-shape (concave hull) per
+# stability class.  shape_alpha is chosen adaptively by default.
+# Requires: pip install pyvista scipy
+try:
+    out = os.path.join(OUT_DIR, "stability_surface_x0_0.20.png")
+    n = pd5.save_frame_surface(
+        x0=0.20,
+        out_path=out,
+        mode="fixed",
+        # shape_alpha=90  # uncomment to fix alpha instead of using adaptive
+    )
+    print(f"Saved: {out}  ({n:,} points)")
+except ImportError:
+    print("PyVista not installed — skipping surface frame.  pip install pyvista scipy")
 
 # ── Show stable regions faintly ────────────────────────────────────────────────
 pd5_show_stable = PhaseDiagram5D(
@@ -103,10 +106,15 @@ output = pd5.create_video(
 )
 print(f"\nVideo: {output}")
 
-# ── Video sweep (matplotlib surface) ──────────────────────────────────────────
-output = pd5.create_video(
-    x0_values=x0_sweep,
-    output_path=os.path.join(OUT_DIR, "stability_surface.mp4"),
-    fps=5, dpi=120, mode="fixed", render="surface", verbose=True,
-)
-print(f"Video: {output}")
+# ── Video sweep (PyVista surface) ─────────────────────────────────────────────
+# render='surface' routes to PyVista (adaptive alpha shapes).
+# Requires: pip install pyvista scipy
+try:
+    output = pd5.create_video(
+        x0_values=x0_sweep,
+        output_path=os.path.join(OUT_DIR, "stability_surface.mp4"),
+        fps=5, mode="fixed", render="surface", verbose=True,
+    )
+    print(f"Video: {output}")
+except ImportError:
+    print("PyVista not installed — skipping surface video.  pip install pyvista scipy")

@@ -45,7 +45,7 @@ x₀ = 0.40  →  60 % of the range remains
 x₀ = 1.00  →  single point      (pure Fe)
 ```
 
-Both render modes show a `x(component) = value` text label in the top-left corner of each frame.
+Both render modes show a `x(component) = value` text label in the top-left corner of each frame, and a **composition scale bar** at the bottom. The blue filled portion of the bar equals `1 − x₀` — the fraction of the full quaternary composition space currently displayed. The bar shrinks as x₀ increases, giving an at-a-glance sense of how much composition space is visible in each frame.
 
 ---
 
@@ -158,7 +158,7 @@ Three modes control how the tetrahedron is scaled as x₀ changes:
 
 | Mode | Description |
 |------|-------------|
-| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. x₀ is shown as a text label in the top-left corner. Easiest to read in a video. |
+| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. x₀ label top-left; scale bar at bottom. Easiest to read in a video. |
 | `'shrink_center'` | Tetrahedron shrinks by factor `(1−x₀)` around its centroid. |
 | `'shrink_corner'` | Tetrahedron shrinks toward the origin (pure-x₀ corner). |
 

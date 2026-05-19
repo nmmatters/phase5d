@@ -121,6 +121,80 @@ _PV_FOCAL   = np.array([0.5, 0.3,  0.2])
 _PV_CAM_UP  = np.array([0.0, 0.0,  1.0])
 _PV_LABEL_PUSH = [0.14, 0.10, 0.10, 0.05]   # per-vertex outward push
 
+# Scale bar height appended below each PyVista frame (pixels)
+_PV_SCALE_BAR_PX = 58
+
+
+def _add_pv_scale_bar(
+    img_arr: np.ndarray,
+    out_path: str,
+    x0: float,
+    x0_label: str,
+) -> None:
+    """
+    Composite a PyVista screenshot with a scale bar strip and save.
+
+    A horizontal progress bar is rendered below the PyVista image using
+    matplotlib so the visual language (colour, font) matches the scatter
+    renderer.  The filled (blue) portion = 1 − x0 indicates what fraction
+    of the full quaternary composition space is currently displayed.
+
+    Parameters
+    ----------
+    img_arr : np.ndarray, shape (H, W, 3), uint8
+        Raw PyVista screenshot.
+    out_path : str
+        Destination PNG file.
+    x0 : float
+        Current x₀ value.
+    x0_label : str
+        Name of the x₀ component (e.g. ``'Fe'``).
+    """
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    h, w   = img_arr.shape[:2]
+    bar_px = _PV_SCALE_BAR_PX
+    total  = h + bar_px
+    dpi    = 100
+
+    fig = plt.figure(figsize=(w / dpi, total / dpi), dpi=dpi)
+    fig.patch.set_facecolor("white")
+
+    # ── main PyVista image (top) ──────────────────────────────────────────
+    ax_img = fig.add_axes([0.0, bar_px / total, 1.0, h / total])
+    ax_img.imshow(img_arr)
+    ax_img.set_axis_off()
+
+    # ── scale bar strip (bottom) ──────────────────────────────────────────
+    ax_b = fig.add_axes([0.04, 0.002, 0.92, (bar_px / total) * 0.88])
+    scale = 1.0 - x0
+    ax_b.set_xlim(0, 1)
+    ax_b.set_ylim(0, 1)
+    ax_b.axis("off")
+
+    bar_y, bar_h = 0.18, 0.52
+    ax_b.barh(bar_y, 1.0,   left=0.0, height=bar_h,
+              color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
+    if scale > 0:
+        ax_b.barh(bar_y, scale, left=0.0, height=bar_h,
+                  color="#4477aa", edgecolor="#888888", linewidth=0.8)
+
+    ax_b.text(0.0, 0.03, "0", ha="left",  va="bottom",
+              fontsize=7, transform=ax_b.transAxes)
+    ax_b.text(1.0, 0.03, "1", ha="right", va="bottom",
+              fontsize=7, transform=ax_b.transAxes)
+    ax_b.text(
+        0.5, 0.97,
+        f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
+        ha="center", va="top", fontsize=8, transform=ax_b.transAxes,
+    )
+
+    # ── save without bbox_inches so pixel size is deterministic ──────────
+    canvas = FigureCanvasAgg(fig)
+    canvas.draw()
+    fig.savefig(out_path, dpi=dpi, facecolor="white")
+    plt.close(fig)
+
 
 class PhaseDiagram5D:
     """
@@ -365,35 +439,45 @@ class PhaseDiagram5D:
         ax,
         x0: float,
     ) -> None:
-        """Draw a horizontal scale bar showing current x0 and scale = 1-x0."""
+        """
+        Draw a horizontal scale bar showing what fraction of the full
+        quaternary composition space is currently displayed.
+
+        The blue filled portion represents ``scale = 1 − x0`` — the total
+        remaining composition budget available to the four axes shown.  The
+        ``x(component) = value`` text label is rendered separately in the
+        top-left corner of the figure and is not repeated here.
+        """
         scale = 1.0 - x0
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        bar_y = 0.45
-        bar_h = 0.35
+        bar_y = 0.28
+        bar_h = 0.46
 
-        # Background
+        # Gray background (full composition range 0 → 1)
         ax.barh(bar_y, 1.0, left=0.0, height=bar_h,
                 color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
-        # Filled (scale portion)
+        # Blue filled portion (active scale = 1 − x0)
         if scale > 0:
             ax.barh(bar_y, scale, left=0.0, height=bar_h,
                     color="#4477aa", edgecolor="#888888", linewidth=0.8)
 
-        # Text: component name and values
+        # Tick labels at the endpoints
+        ax.text(0.0, 0.04, "0", ha="left",  va="bottom", fontsize=7,
+                transform=ax.transAxes)
+        ax.text(1.0, 0.04, "1", ha="right", va="bottom", fontsize=7,
+                transform=ax.transAxes)
+
+        # Header: show scale value so the bar is self-explanatory
         lbl = self.component_labels[0]
         ax.text(
-            0.5, 0.92,
-            f"{lbl} = {x0:.3f}    ·    scale = {scale:.3f}",
-            ha="center", va="center", fontsize=9,
+            0.5, 0.97,
+            f"composition scale  (1 − x({lbl}) = {scale:.3f})",
+            ha="center", va="top", fontsize=8,
             transform=ax.transAxes,
         )
-        ax.text(0.0, 0.05, "0", ha="left", va="top", fontsize=7,
-                transform=ax.transAxes)
-        ax.text(1.0, 0.05, "1", ha="right", va="top", fontsize=7,
-                transform=ax.transAxes)
 
     def _add_colorbar(self, fig, ax_left: float = 0.88) -> None:
         ax_cb = fig.add_axes([ax_left, 0.15, 0.02, 0.65])
@@ -411,7 +495,7 @@ class PhaseDiagram5D:
                 cb_label = f"({self.value_unit})"
             cb.set_label(cb_label, fontsize=8, labelpad=6)
 
-    def _add_phase_legend(self, fig) -> None:
+    def _add_phase_legend(self, fig, bbox_to_anchor=(0.02, 0.02)) -> None:
         labels = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
         handles = []
         for label in (-1, 0, 1):
@@ -427,7 +511,7 @@ class PhaseDiagram5D:
         fig.legend(
             handles=handles,
             loc="lower left",
-            bbox_to_anchor=(0.02, 0.02),
+            bbox_to_anchor=bbox_to_anchor,
             fontsize=9,
             frameon=False,
         )
@@ -684,8 +768,8 @@ class PhaseDiagram5D:
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
 
-        # 3-D axes — full figure, right strip reserved for colorbar
-        ax3d: Axes3D = fig.add_axes([0.02, 0.02, 0.84, 0.95], projection="3d")
+        # 3-D axes — right strip reserved for colorbar; bottom strip for scale bar
+        ax3d: Axes3D = fig.add_axes([0.02, 0.11, 0.84, 0.84], projection="3d")
         ax3d.view_init(elev=elev, azim=azim)
         ax3d.set_axis_off()
 
@@ -750,14 +834,18 @@ class PhaseDiagram5D:
             fontsize=12, va="top", ha="left", color="black",
         )
 
+        # Scale bar — bottom strip below the 3-D axes
+        ax_bar = fig.add_axes([0.04, 0.01, 0.80, 0.09])
+        self._draw_scale_bar(ax_bar, x0)
+
         # Legend / colorbar
+        # Anchor raised to 0.12 so the legend clears the scale bar strip (0.01-0.10)
         if self.value_type == "continuous":
             self._add_colorbar(fig)
             if self._stability_data is not None:
-                # Combined mode: also show stability alpha legend
-                self._add_phase_legend(fig)
+                self._add_phase_legend(fig, bbox_to_anchor=(0.02, 0.12))
         else:
-            self._add_phase_legend(fig)
+            self._add_phase_legend(fig, bbox_to_anchor=(0.02, 0.12))
 
         return fig, ax3d
 
@@ -1052,8 +1140,11 @@ class PhaseDiagram5D:
                 render_points_as_spheres=True,
             )
 
-        pl.screenshot(out_path, transparent_background=False)
+        img_arr = pl.screenshot(None, transparent_background=False, return_img=True)
         pl.close()
+
+        # Composite PyVista render with matplotlib scale bar strip
+        _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0])
         return n_total
 
     def save_frames(

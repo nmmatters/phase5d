@@ -17,10 +17,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+surface = ["pyvista>=0.43", "scipy>=1.10"]
+isosurface = ["scipy>=1.10", "scikit-image>=0.19"]
 dev = ["pytest", "pytest-cov"]
 
 [project.urls]
-Repository = "https://github.com/nmarschall/phase5d"
+Repository = "https://github.com/nmmatters/phase5d"
 
 [tool.setuptools.packages.find]
 where = ["."]

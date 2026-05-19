@@ -1047,9 +1047,12 @@ class PhaseDiagram5D:
             Frame image resolution.
         keep_frames : bool
             Retain the individual PNG frames after the video is assembled.
+            When *True* and *frames_dir* is not given, frames are saved in a
+            ``<videoname>_frames/`` sub-directory next to *output_path*.
         frames_dir : str or None
-            Where to store frames.  A temporary directory is used when None
-            and deleted afterwards unless keep_frames=True.
+            Where to store frames.  Defaults to a temporary directory (deleted
+            after assembly) unless *keep_frames* is True, in which case it
+            defaults to ``<videoname>_frames/`` next to *output_path*.
         verbose : bool
             Print progress.
         **plot_kwargs
@@ -1077,8 +1080,13 @@ class PhaseDiagram5D:
         # Frame directory
         _tmp_dir: Optional[str] = None
         if frames_dir is None:
-            _tmp_dir = tempfile.mkdtemp(prefix="phase5d_")
-            frames_dir = _tmp_dir
+            if keep_frames:
+                # Place frames next to the video: <videoname>_frames/
+                base = os.path.splitext(os.path.abspath(output_path))[0]
+                frames_dir = base + "_frames"
+            else:
+                _tmp_dir = tempfile.mkdtemp(prefix="phase5d_")
+                frames_dir = _tmp_dir
 
         try:
             frame_paths = self.save_frames(

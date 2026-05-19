@@ -105,10 +105,15 @@ def _alpha_boundary_faces(pts: np.ndarray, shape_alpha: float):
 
 
 # Adaptive alpha calibration constants
-# Calibrated at x0=0.30, step=0.01 FeMnNiCoCu grid (N_ref=62 196 pts).
-_ALPHA_REF_MPL = 2.0    # matplotlib surface backend
-_ALPHA_REF_PV  = 90.0   # PyVista surface backend
-_N_REF         = 62_196
+# Adaptive alpha calibration constants.
+# PyVista backend: calibrated at max_points=50 000 (the actual N fed into
+# Delaunay when a slice has >50 000 points).  For sparse slices (N < 50 000)
+# the full slice is used and alpha scales down proportionally.
+# Matplotlib backend: no max_points cap, calibrated at x0=0.30 (62 196 pts).
+_ALPHA_REF_MPL = 2.0
+_ALPHA_REF_PV  = 90.0
+_N_REF_MPL     = 62_196
+_N_REF_PV      = 50_000   # == default max_points for save_frame_surface
 
 # PyVista camera / label defaults (work for any 5-component tetrahedron)
 _PV_CAM_POS = np.array([3.0, -2.0, 1.4])
@@ -527,7 +532,7 @@ class PhaseDiagram5D:
         n_slice  = int(kwargs.pop("_n_slice", len(pts)))
         _sa_user = kwargs.pop("shape_alpha", None)
         if _sa_user is None:
-            shape_alpha = _ALPHA_REF_MPL * (n_slice / _N_REF) ** (1.0 / 3.0)
+            shape_alpha = _ALPHA_REF_MPL * (n_slice / _N_REF_MPL) ** (1.0 / 3.0)
         else:
             shape_alpha = float(_sa_user)
 
@@ -784,10 +789,12 @@ class PhaseDiagram5D:
             Alpha-shape tightness.  When *None* (default) the value is
             computed adaptively as::
 
-                shape_alpha = 90 × (N / 62196)^(1/3)
+                shape_alpha = 90 × (N_eff / 50000)^(1/3)
 
-            where *N* is the number of points in the x₀ slice.  Pass an
-            explicit float to override (e.g. ``shape_alpha=90``).
+            where *N_eff* = min(N, max_points) is the actual number of
+            points fed into the Delaunay triangulation after subsampling.
+            This keeps the circumradius threshold matched to the true point
+            density.  Pass an explicit float to override.
         window_size : (width, height)
             Off-screen render resolution in pixels.
         camera_position : list or None
@@ -828,8 +835,11 @@ class PhaseDiagram5D:
         n_total = len(slice_data)
 
         # ── adaptive alpha ────────────────────────────────────────────────
+        # Use the effective N (after max_points subsampling) so alpha tracks
+        # the actual point density fed into the Delaunay, not the raw slice size.
         if shape_alpha is None:
-            sa = _ALPHA_REF_PV * (n_total / _N_REF) ** (1.0 / 3.0)
+            n_effective = min(n_total, max_points) if max_points is not None else n_total
+            sa = _ALPHA_REF_PV * (n_effective / _N_REF_PV) ** (1.0 / 3.0)
         else:
             sa = float(shape_alpha)
 

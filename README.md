@@ -43,6 +43,7 @@ The scale bar at the bottom of each frame encodes this information visually.
 | NumPy   | ≥ 1.24  | |
 | Matplotlib | ≥ 3.7 | |
 | SciPy   | ≥ 1.10  | required for `render='surface'` and `plot_isosurface()` |
+| PyVista | ≥ 0.43  | required for `render='surface'` |
 | scikit-image | ≥ 0.19 | required for `plot_isosurface()` only |
 | **ffmpeg** | any | for video output |
 
@@ -136,17 +137,22 @@ fig, ax = pd5.plot_frame(x0=0.3, mode='shrink_center')
 
 ### Render style (`render`)
 
-Three rendering styles are available:
+Two rendering styles are available:
 
 | Style | Description | Dependencies |
 |-------|-------------|--------------|
-| `'scatter'` **(default)** | Each composition point is a marker. Fast and faithful to the raw data distribution. | — |
-| `'surface'` | Alpha-shape surface mesh per phase region via matplotlib. Lightweight, works anywhere. | `scipy` |
-| `'surface_pv'` | High-quality PyVista surface with smooth shading, proper lighting, and specular highlights. Recommended for publication figures and video. | `scipy`, `pyvista` |
+| `'scatter'` **(default)** | Each composition point is a marker. Fast and faithful to the raw data distribution. Uses matplotlib. | — |
+| `'surface'` | High-quality alpha-shape surface mesh with smooth shading, proper lighting, and specular highlights via PyVista. Recommended for publication figures and video. | `scipy`, `pyvista` |
 
 ```python
-fig, ax = pd5.plot_frame(x0=0.3, render='surface')          # matplotlib
-fig, ax = pd5.plot_frame(x0=0.3, render='surface_pv')       # PyVista
+# Single scatter frame (matplotlib)
+fig, ax = pd5.plot_frame(x0=0.3, render='scatter')
+
+# Surface video (PyVista — writes directly to file, cannot return a figure)
+pd5.create_video(x0_values=..., output_path='video.mp4', render='surface')
+
+# Single surface frame
+pd5.save_frame_surface(x0=0.3, out_path='frame.png')
 ```
 
 ### Alpha shape parameter (`shape_alpha`)
@@ -162,20 +168,25 @@ When `shape_alpha` is not set, it is chosen automatically per frame as
 shape_alpha = 90 × (N / 62196)^(1/3)
 ```
 
-where `N` is the number of points in the current x₀ slice and 62 196 is the
-reference count at x₀ = 0.30 for a step = 0.01 FeMnNiCoCu grid.  This keeps
-the circumradius threshold proportional to the local grid spacing, so surface
-quality stays consistent as the slice becomes sparser at higher x₀.
+where `N` is the number of points in the current x₀ slice (all points, no
+subsampling) and 62 196 is the reference count at x₀ = 0.30 for a step = 0.01
+FeMnNiCoCu grid.  This keeps the circumradius threshold proportional to the
+local grid spacing, so surface quality stays consistent as the slice becomes
+sparser at higher x₀.
+
+> **Important:** the alpha-shape path always uses **all** per-phase points —
+> no random subsampling — to preserve surface quality.  Random subsampling
+> destroys the regular grid structure and produces blurry, irregular surfaces.
 
 **Manual override:**
 Pass `shape_alpha` as a keyword argument to fix the value across all frames:
 
 ```python
 # Fixed alpha — same threshold for every frame
-pd5.create_video(..., render='surface_pv', shape_alpha=90)
+pd5.create_video(..., render='surface', shape_alpha=90)
 
 # Let the library pick per-frame (default)
-pd5.create_video(..., render='surface_pv')
+pd5.create_video(..., render='surface')
 ```
 
 **Choosing a value (step = 0.01 grid):**
@@ -190,6 +201,32 @@ pd5.create_video(..., render='surface_pv')
 The fragmentation threshold scales with grid density: for step = 0.05 the ceiling
 is around `shape_alpha ≈ 18`; for step = 0.01 it is ≈ 90.  A safe starting
 point is `shape_alpha ≈ 0.9 / step`.
+
+### Composition sparsity at high x₀ (`min_points`)
+
+As x₀ increases toward 1, the available composition space for the remaining
+components shrinks rapidly.  For a step = 0.01 grid on FeMnNiCoCu data, the
+slice at x₀ = 0.85 contains only ~800 points and meaningful alpha-shape
+surfaces cannot be constructed.
+
+The `min_points` parameter (default **500**) controls this gracefully: frames
+below the threshold render the tetrahedron wireframe and vertex labels only
+(no phase surfaces), which is physically correct — the near-pure-Fe region
+simply has no multi-component phase data.
+
+```python
+# Default: wireframe-only below 500 points
+pd5.create_video(..., render='surface')
+
+# Raise threshold to cut off earlier (cleaner video)
+pd5.create_video(..., render='surface', min_points=1000)
+
+# Disable threshold (render all frames, may show artefacts near x₀=1)
+pd5.create_video(..., render='surface', min_points=4)
+```
+
+For step = 0.01 FeMnNiCoCu data the surface quality is good up to x₀ ≈ 0.84
+(~969 points); above that only the wireframe is shown.
 
 ---
 
@@ -245,13 +282,13 @@ PhaseDiagram5D(
 )
 ```
 
-#### `.plot_frame(x0, …)`
+#### `.plot_frame(x0, …)` — scatter only (matplotlib)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `x0` | — | x₀ slice value |
 | `mode` | `'fixed'` | Tetrahedron scaling mode |
-| `render` | `'scatter'` | `'scatter'` or `'surface'` |
+| `render` | `'scatter'` | Only `'scatter'` supported; use `create_video` for surfaces |
 | `alpha` | `0.65` | Point alpha (continuous only) |
 | `marker_size` | `3` | Scatter marker size (pt²) |
 | `max_points` | `15000` | Max points rendered (random sub-sample) |
@@ -264,6 +301,25 @@ PhaseDiagram5D(
 | `dpi` | `100` | Figure resolution |
 
 Returns `(fig, ax)`.
+
+#### `.save_frame_surface(x0, out_path, …)` — surface only (PyVista)
+
+Renders a single high-quality surface frame off-screen and saves it as a PNG.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `x0` | — | x₀ slice value |
+| `out_path` | — | Output PNG file path |
+| `mode` | `'fixed'` | Tetrahedron scaling mode |
+| `shape_alpha` | `None` | Alpha-shape tightness; `None` = adaptive `90×(N/62196)^(1/3)` |
+| `window_size` | `(1400, 1000)` | Off-screen render resolution (pixels) |
+| `camera_position` | `None` | PyVista camera triple `[pos, focal, up]`; `None` = library default |
+| `show_wireframe` | `True` | Draw tetrahedron edges |
+| `show_vertex_labels` | `True` | Label vertices with component names |
+| `max_points` | `50000` | Max points for continuous mode (no effect on phase_stability) |
+| `min_points` | `500` | Min slice points to attempt surface rendering; below threshold renders wireframe only |
+
+Returns the total number of points in the slice.
 
 #### `.plot_isosurface(level, …)`
 
@@ -304,12 +360,19 @@ fig.savefig('isosurfaces.png', dpi=150, bbox_inches='tight')
 #### `.save_frames(x0_values, output_dir, dpi=150, verbose=True, **plot_kwargs)`
 
 Saves one PNG per x₀ value.  Returns a list of file paths.
+All `plot_frame` and `save_frame_surface` keyword arguments are forwarded.
 
-#### `.create_video(x0_values, output_path, fps=10, dpi=150, keep_frames=False, …)`
+#### `.create_video(x0_values, output_path, fps=10, dpi=150, keep_frames=False, frames_dir=None, …)`
 
 Renders frames and assembles them into an mp4 via ffmpeg.
 `x0_values` defaults to the full grid inferred from the data.
 Returns the absolute path of the video file.
+
+When `keep_frames=True` and `frames_dir` is not given, frames are saved to
+`<videoname>_frames/` in the same directory as the output video.
+
+All `plot_frame` / `save_frame_surface` keyword arguments (including
+`render`, `mode`, `shape_alpha`, `min_points`) are forwarded via `**plot_kwargs`.
 
 #### `.show_interactive(x0_init=0.0, mode='fixed', render='scatter', …)`
 
@@ -394,7 +457,7 @@ See the [`examples/`](examples/) directory:
 | [`example_continuous.py`](examples/example_continuous.py) | Mixing enthalpy landscape, all three tetrahedron modes, scatter video |
 | [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, scatter + alpha-shape surface render, video |
 | [`example_isosurface.py`](examples/example_isosurface.py) | Isosurface rendering — single, nested, and rotated views |
-| [`example_surface_pv.py`](examples/example_surface_pv.py) | **PyVista surface rendering** — FeMnNiCoCu at 873 K, x(Fe) 0→0.40 sweep. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
+| [`example_surface_pv.py`](examples/example_surface_pv.py) | **Surface rendering** (`render='surface'`, PyVista) — FeMnNiCoCu at 873 K, x(Fe) 0→0.40 sweep. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
 
 Run from the repository root:
 
@@ -416,12 +479,12 @@ python examples/example_surface_pv.py          # requires: pip install pyvista
   index to create a rotating video.
 - **Colormap**: `'RdBu_r'` works well for enthalpy (red = positive,
   blue = negative); `'plasma'` for monotone properties.
-- **PyVista surface video render time**: a full 100-frame video with `render='surface_pv'`
-  at `step=0.01` takes roughly **30–40 minutes** on a modern desktop.  This is expected —
-  the dense slices near x₀ = 0 contain up to ~150 k points each, and the alpha-shape
-  Delaunay triangulation scales super-linearly with point count.  Slices near x₀ = 1
-  finish in under 1 s.  If you only need a quick preview, use every 10th frame
-  (`x0_values=np.arange(0.05, 1.0, 0.10)`) which completes in ~2 minutes.
+- **Surface video render time**: a full 101-frame video with `render='surface'`
+  at `step=0.01` takes roughly **15–20 minutes** on a modern desktop (tested on
+  FeMnNiCoCu TCHEA4 at 873 K).  Dense slices near x₀ = 0 contain up to ~177 k
+  points; the alpha-shape Delaunay triangulation scales super-linearly with point
+  count.  Slices near x₀ = 1 finish in under 1 s.  For a quick preview use every
+  5th frame (`x0_values=np.arange(0.00, 1.01, 0.05)`) which completes in ~3 minutes.
 - **ffmpeg not found?** `from phase5d.video import check_ffmpeg; print(check_ffmpeg())`
 - **Interactive exploration**: `pd5.show_interactive()` opens a live window with sliders for x₀, elevation, and azimuth — no video needed.
 - **ParaView export**: `pd5.save_vtk('diagram.vtu')` writes the full point cloud with all scalar fields; use Threshold on `x0` and Contour on `value` in ParaView for fully interactive 3-D analysis.

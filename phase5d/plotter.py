@@ -769,6 +769,7 @@ class PhaseDiagram5D:
         show_wireframe: bool = True,
         show_vertex_labels: bool = True,
         max_points: int = 50000,
+        min_points: int = 500,
     ) -> int:
         """
         Render a single surface frame via PyVista and save it as a PNG.
@@ -805,7 +806,15 @@ class PhaseDiagram5D:
         show_vertex_labels : bool
             Label each vertex with its component name.
         max_points : int
-            Maximum points per phase class (random sub-sample if exceeded).
+            Maximum points per phase class for the continuous rendering path.
+            Has no effect on phase_stability mode (all points are used for
+            the alpha-shape Delaunay to preserve surface quality).
+        min_points : int
+            Minimum number of points required to attempt surface rendering.
+            When the x₀ slice contains fewer than *min_points* total points,
+            only the tetrahedron wireframe and vertex labels are drawn (no
+            phase surfaces).  This prevents artefacts at Fe-rich compositions
+            where the composition space becomes very sparse.  Default: 500.
 
         Returns
         -------
@@ -855,7 +864,10 @@ class PhaseDiagram5D:
         pl.set_background("white")
 
         # ── surfaces ──────────────────────────────────────────────────────
-        if self.value_type == "phase_stability":
+        # Skip surface rendering if the slice is too sparse; render wireframe only.
+        if n_total < min_points:
+            pass  # fall through to wireframe + labels below
+        elif self.value_type == "phase_stability":
             values_sl = slice_data[:, 5].astype(int)
             for label in (-1, 0):
                 face_op = self._phase_alphas.get(label, 0.0)
@@ -881,7 +893,7 @@ class PhaseDiagram5D:
                     specular=0.3, specular_power=15, diffuse=0.8, ambient=0.2,
                 )
 
-        else:
+        elif n_total >= min_points:
             # Continuous or combined mode: one surface for all visible points
             if len(slice_data) > max_points:
                 rng = np.random.default_rng(42)
@@ -1007,7 +1019,7 @@ class PhaseDiagram5D:
                 # PyVista path — extract relevant kwargs, write PNG directly
                 pv_keys = ("mode", "shape_alpha", "window_size",
                            "camera_position", "show_wireframe",
-                           "show_vertex_labels", "max_points")
+                           "show_vertex_labels", "max_points", "min_points")
                 pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
                 n_slice = self.save_frame_surface(x0, path, **pv_kw)
             else:

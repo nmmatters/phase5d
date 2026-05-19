@@ -136,16 +136,60 @@ fig, ax = pd5.plot_frame(x0=0.3, mode='shrink_center')
 
 ### Render style (`render`)
 
-Two rendering styles are available for the data points in each x₀ slice:
+Three rendering styles are available:
 
-| Style | Description |
-|-------|-------------|
-| `'scatter'` **(default)** | Each composition point is a marker. Fast and faithful to the raw data distribution. |
-| `'surface'` | The convex hull of each phase region is rendered as a polygon mesh. One hull per stability class for `phase_stability`; hull faces colored by the scalar value for `continuous` mode. Requires `scipy`. |
+| Style | Description | Dependencies |
+|-------|-------------|--------------|
+| `'scatter'` **(default)** | Each composition point is a marker. Fast and faithful to the raw data distribution. | — |
+| `'surface'` | Alpha-shape surface mesh per phase region via matplotlib. Lightweight, works anywhere. | `scipy` |
+| `'surface_pv'` | High-quality PyVista surface with smooth shading, proper lighting, and specular highlights. Recommended for publication figures and video. | `scipy`, `pyvista` |
 
 ```python
-fig, ax = pd5.plot_frame(x0=0.3, render='surface')
+fig, ax = pd5.plot_frame(x0=0.3, render='surface')          # matplotlib
+fig, ax = pd5.plot_frame(x0=0.3, render='surface_pv')       # PyVista
 ```
+
+### Alpha shape parameter (`shape_alpha`)
+
+Both surface renderers use an **alpha shape** (concave hull) to reconstruct the phase
+boundary from scattered composition points.  A tetrahedron from the Delaunay
+triangulation is kept only if its circumradius `R < 1 / shape_alpha`.
+
+**Default behaviour — adaptive alpha:**
+When `shape_alpha` is not set, it is chosen automatically per frame as
+
+```
+shape_alpha = 90 × (N / 62196)^(1/3)
+```
+
+where `N` is the number of points in the current x₀ slice and 62 196 is the
+reference count at x₀ = 0.30 for a step = 0.01 FeMnNiCoCu grid.  This keeps
+the circumradius threshold proportional to the local grid spacing, so surface
+quality stays consistent as the slice becomes sparser at higher x₀.
+
+**Manual override:**
+Pass `shape_alpha` as a keyword argument to fix the value across all frames:
+
+```python
+# Fixed alpha — same threshold for every frame
+pd5.create_video(..., render='surface_pv', shape_alpha=90)
+
+# Let the library pick per-frame (default)
+pd5.create_video(..., render='surface_pv')
+```
+
+**Choosing a value (step = 0.01 grid):**
+
+| `shape_alpha` | Effect |
+|---|---|
+| 2 – 10 | Near-convex hull; smooth but hides fine phase boundary detail |
+| 20 – 50 | Captures main structural features |
+| 80 – 90 | Maximum detail before fragmentation on a step = 0.01 grid |
+| > 100 | Surface fragments — individual triangles break apart |
+
+The fragmentation threshold scales with grid density: for step = 0.05 the ceiling
+is around `shape_alpha ≈ 18`; for step = 0.01 it is ≈ 90.  A safe starting
+point is `shape_alpha ≈ 0.9 / step`.
 
 ---
 
@@ -347,15 +391,18 @@ See the [`examples/`](examples/) directory:
 
 | File | Description |
 |------|-------------|
-| [`example_continuous.py`](examples/example_continuous.py) | Mixing enthalpy landscape, all three modes, video |
-| [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, custom colors, video |
+| [`example_continuous.py`](examples/example_continuous.py) | Mixing enthalpy landscape, all three tetrahedron modes, scatter video |
+| [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, scatter + alpha-shape surface render, video |
 | [`example_isosurface.py`](examples/example_isosurface.py) | Isosurface rendering — single, nested, and rotated views |
+| [`example_surface_pv.py`](examples/example_surface_pv.py) | **PyVista surface rendering** — FeMnNiCoCu at 873 K, x(Fe) 0→0.40 sweep. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
 
 Run from the repository root:
 
 ```bash
 python examples/example_continuous.py
 python examples/example_phase_stability.py
+python examples/example_isosurface.py
+python examples/example_surface_pv.py          # requires: pip install pyvista
 ```
 
 ---
@@ -369,6 +416,12 @@ python examples/example_phase_stability.py
   index to create a rotating video.
 - **Colormap**: `'RdBu_r'` works well for enthalpy (red = positive,
   blue = negative); `'plasma'` for monotone properties.
+- **PyVista surface video render time**: a full 100-frame video with `render='surface_pv'`
+  at `step=0.01` takes roughly **30–40 minutes** on a modern desktop.  This is expected —
+  the dense slices near x₀ = 0 contain up to ~150 k points each, and the alpha-shape
+  Delaunay triangulation scales super-linearly with point count.  Slices near x₀ = 1
+  finish in under 1 s.  If you only need a quick preview, use every 10th frame
+  (`x0_values=np.arange(0.05, 1.0, 0.10)`) which completes in ~2 minutes.
 - **ffmpeg not found?** `from phase5d.video import check_ffmpeg; print(check_ffmpeg())`
 - **Interactive exploration**: `pd5.show_interactive()` opens a live window with sliders for x₀, elevation, and azimuth — no video needed.
 - **ParaView export**: `pd5.save_vtk('diagram.vtu')` writes the full point cloud with all scalar fields; use Threshold on `x0` and Contour on `value` in ParaView for fully interactive 3-D analysis.

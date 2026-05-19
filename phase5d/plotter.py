@@ -36,6 +36,87 @@ from .utils import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+def _alpha_boundary_faces(pts: np.ndarray, shape_alpha: float):
+    """
+    Compute the boundary triangle indices of a 3-D alpha shape.
+
+    A Delaunay tetrahedron is kept if its circumradius R < 1 / shape_alpha.
+    Boundary faces are those belonging to exactly one kept tetrahedron.
+
+    Parameters
+    ----------
+    pts : np.ndarray, shape (N, 3)
+    shape_alpha : float
+        Circumradius filter: keep tetrahedra with R < 1/shape_alpha.
+
+    Returns
+    -------
+    np.ndarray, shape (M, 3) of int
+        Row indices into *pts* for each boundary triangle, or an empty
+        array if fewer than 4 points or no valid tetrahedra remain.
+    """
+    from scipy.spatial import Delaunay
+
+    if len(pts) < 4:
+        return np.empty((0, 3), dtype=np.intp)
+    try:
+        tri = Delaunay(pts)
+    except Exception:
+        return np.empty((0, 3), dtype=np.intp)
+
+    vs = tri.simplices
+    A, B, C, D = pts[vs[:, 0]], pts[vs[:, 1]], pts[vs[:, 2]], pts[vs[:, 3]]
+
+    M_mat = 2.0 * np.stack([B - A, C - A, D - A], axis=1)   # (k,3,3)
+    rhs   = np.stack([
+        (B * B).sum(1) - (A * A).sum(1),
+        (C * C).sum(1) - (A * A).sum(1),
+        (D * D).sum(1) - (A * A).sum(1),
+    ], axis=1)                                                 # (k,3)
+
+    dets = np.linalg.det(M_mat)
+    good = np.abs(dets) > 1e-14
+    R    = np.full(len(vs), np.inf)
+    if good.any():
+        centers  = np.linalg.solve(
+            M_mat[good], rhs[good, :, np.newaxis]
+        ).squeeze(-1)
+        R[good] = np.linalg.norm(centers - A[good], axis=1)
+
+    valid = vs[R < 1.0 / shape_alpha]
+    if len(valid) == 0:
+        return np.empty((0, 3), dtype=np.intp)
+
+    all_faces = np.concatenate([
+        np.sort(valid[:, [0, 1, 2]], axis=1),
+        np.sort(valid[:, [0, 1, 3]], axis=1),
+        np.sort(valid[:, [0, 2, 3]], axis=1),
+        np.sort(valid[:, [1, 2, 3]], axis=1),
+    ])
+    _, inv, counts = np.unique(
+        all_faces, axis=0, return_inverse=True, return_counts=True
+    )
+    boundary = all_faces[counts[inv] == 1]
+    return boundary  # (M, 3) int
+
+
+# Adaptive alpha calibration constants
+# Calibrated at x0=0.30, step=0.01 FeMnNiCoCu grid (N_ref=62 196 pts).
+_ALPHA_REF_MPL = 2.0    # matplotlib surface backend
+_ALPHA_REF_PV  = 90.0   # PyVista surface backend
+_N_REF         = 62_196
+
+# PyVista camera / label defaults (work for any 5-component tetrahedron)
+_PV_CAM_POS = np.array([3.0, -2.0, 1.4])
+_PV_FOCAL   = np.array([0.5, 0.3,  0.2])
+_PV_CAM_UP  = np.array([0.0, 0.0,  1.0])
+_PV_LABEL_PUSH = [0.14, 0.10, 0.10, 0.05]   # per-vertex outward push
+
+
 class PhaseDiagram5D:
     """
     Visualize a five-component alloy phase space as a sequence of
@@ -391,24 +472,45 @@ class PhaseDiagram5D:
         **kwargs,
     ) -> None:
         """
-        Render data as convex-hull surfaces, one hull per phase region.
+        Render data as alpha-shape surfaces, one surface per phase region.
 
-        For ``value_type='phase_stability'`` a separate hull is drawn for each
-        stability class (unstable and meta-stable; stable is invisible).
-        For ``value_type='continuous'`` (with or without combined stability
-        masking) the hull faces are colored by the mean scalar value of their
-        three vertices, taken from the diagram's colormap.
+        Replaces the former convex-hull approach with a concave hull (alpha
+        shape) that follows the actual irregular phase boundary instead of the
+        outermost flat envelope.
 
-        Falls back silently to nothing on degenerate input (< 4 points or
-        coplanar configuration).  Requires ``scipy >= 1.0``.
+        The tightness of the surface is controlled by ``shape_alpha``
+        (passed via **kwargs):
 
-        *kwargs* are merged on top of the library defaults and forwarded to
-        ``Poly3DCollection`` (e.g. ``edgecolor='white'``, ``linewidth=0.3``).
-        Note: ``facecolor`` is always controlled by the colormap / phase colors;
-        pass ``edgecolor`` or other non-color properties to customise the mesh.
+        - smaller values → looser surface, approaches convex hull
+        - larger values  → tighter surface, more boundary detail
+
+        **Default (adaptive):** when ``shape_alpha`` is not supplied, it is
+        chosen automatically per frame as::
+
+            shape_alpha = 2.0 × (N / 62196)^(1/3)
+
+        where *N* is the number of points in the current x₀ slice.  This
+        keeps the circumradius threshold proportional to the local grid
+        spacing so surface quality remains consistent as slices become
+        sparser at higher x₀ values.  The reference point (N = 62 196,
+        shape_alpha = 2) corresponds to a step = 0.01 FeMnNiCoCu grid at
+        x₀ = 0.30.
+
+        **Manual override:** pass ``shape_alpha=<value>`` to fix the
+        threshold across all frames.
+
+        For ``value_type='phase_stability'`` a separate surface is drawn for
+        each stability class (unstable and meta-stable; stable is invisible).
+        For ``value_type='continuous'`` faces are colored by the colormap.
+
+        Falls back silently to nothing on degenerate input (< 4 points).
+        Requires ``scipy >= 1.0``.
+
+        *kwargs* are merged on top of library defaults and forwarded to
+        ``Poly3DCollection`` after ``shape_alpha`` is consumed
+        (e.g. ``edgecolor='white'``, ``linewidth=0.2``).
         """
         try:
-            from scipy.spatial import ConvexHull
             from mpl_toolkits.mplot3d.art3d import Poly3DCollection
         except ImportError as exc:
             raise ImportError(
@@ -419,42 +521,38 @@ class PhaseDiagram5D:
         import matplotlib.cm as _mcm
         import matplotlib.colors as _mcolors
 
-        cm = _mcm.get_cmap(self.colormap)
+        # Adaptive alpha: scale with N^(1/3) to track local grid spacing.
+        # n_slice is the pre-downsample count injected by plot_frame; falls
+        # back to len(pts) if not present (e.g. direct _render_surface calls).
+        n_slice  = int(kwargs.pop("_n_slice", len(pts)))
+        _sa_user = kwargs.pop("shape_alpha", None)
+        if _sa_user is None:
+            shape_alpha = _ALPHA_REF_MPL * (n_slice / _N_REF) ** (1.0 / 3.0)
+        else:
+            shape_alpha = float(_sa_user)
+
+        cm   = _mcm.get_cmap(self.colormap)
         norm = _mcolors.Normalize(vmin=self.vmin, vmax=self.vmax)
 
-        def _add_hull(sub_pts, sub_vals, face_alpha, solid_color=None):
-            """
-            Compute ConvexHull of *sub_pts*, build a Poly3DCollection, and
-            add it to ax3d.
-
-            If *solid_color* is given (RGB tuple) every face gets that color.
-            Otherwise face colors are derived from *sub_vals* via the colormap.
-            """
-            if len(sub_pts) < 4:
+        def _add_surface(sub_pts, sub_vals, face_alpha, solid_color=None):
+            boundary = _alpha_boundary_faces(sub_pts, shape_alpha)
+            if len(boundary) == 0:
                 return
-            try:
-                hull = ConvexHull(sub_pts)
-            except Exception:
-                return
-            triangles = [sub_pts[s] for s in hull.simplices]
-
+            triangles = sub_pts[boundary]   # (M, 3, 3) vertex coords
+            n_tri = len(triangles)
             if solid_color is not None:
                 r, g, b = solid_color
-                fcolors = np.tile([r, g, b, face_alpha], (len(hull.simplices), 1))
+                fcolors = np.tile([r, g, b, face_alpha], (n_tri, 1))
             else:
-                fcolors = np.array([
-                    [*cm(norm(sub_vals[s].mean()))[:3], face_alpha]
-                    for s in hull.simplices
-                ])
-
+                mean_val = float(sub_vals.mean())
+                fcolors = np.tile([*cm(norm(mean_val))[:3], face_alpha], (n_tri, 1))
             poly_kw = dict(edgecolor="none")
-            poly_kw.update(kwargs)   # user overrides win
+            poly_kw.update(kwargs)
             poly = Poly3DCollection(triangles, **poly_kw)
-            poly.set_facecolor(fcolors)   # always driven by colormap/phase
+            poly.set_facecolor(fcolors)
             ax3d.add_collection3d(poly)
 
         if self.value_type == "phase_stability":
-            # values column IS the stability label; one hull per class
             for label in (-1, 0):          # label 1 = stable = invisible
                 a = self._phase_alphas[label]
                 if a < 1e-3:
@@ -462,7 +560,7 @@ class PhaseDiagram5D:
                 mask = values.astype(int) == label
                 if mask.sum() < 4:
                     continue
-                _add_hull(pts[mask], None, a, solid_color=self._phase_colors[label])
+                _add_surface(pts[mask], None, a, solid_color=self._phase_colors[label])
 
         elif stability is not None:
             # Combined mode: group by stability, colormap hue from values
@@ -473,15 +571,15 @@ class PhaseDiagram5D:
                 mask = stability == label
                 if mask.sum() < 4:
                     continue
-                _add_hull(pts[mask], values[mask], a)
+                _add_surface(pts[mask], values[mask], a)
 
         else:
-            # Pure continuous: one hull for all visible points
+            # Pure continuous: one surface for all visible points
             visible = rgba[:, 3] > 1e-3
             if visible.sum() < 4:
                 return
             mean_alpha = float(rgba[visible, 3].mean())
-            _add_hull(pts[visible], values[visible], mean_alpha)
+            _add_surface(pts[visible], values[visible], mean_alpha)
 
     # ------------------------------------------------------------------
     # Public API
@@ -570,6 +668,8 @@ class PhaseDiagram5D:
               (e.g. ``marker='^'``, ``edgecolors='k'``, ``linewidths=0.5``).
             - ``render='surface'`` → forwarded to ``Poly3DCollection``
               (e.g. ``edgecolor='white'``, ``linewidth=0.2``).
+              Pass ``shape_alpha=<float>`` to override the default adaptive
+              alpha (see :meth:`_render_surface` for details).
 
             These kwargs are also accepted by :meth:`save_frames` and
             :meth:`create_video`, which forward all extra keyword arguments
@@ -580,8 +680,14 @@ class PhaseDiagram5D:
         fig : matplotlib Figure
         ax  : mpl_toolkits.mplot3d.Axes3D
         """
-        if render not in ("scatter", "surface"):
-            raise ValueError("render must be 'scatter' or 'surface'.")
+        if render not in ("scatter", "surface", "surface_pv"):
+            raise ValueError("render must be 'scatter', 'surface', or 'surface_pv'.")
+        if render == "surface_pv":
+            raise ValueError(
+                "render='surface_pv' writes directly to a file and cannot return "
+                "a matplotlib figure.  Use save_frame_pv(x0, out_path) or "
+                "create_video(..., render='surface_pv') instead."
+            )
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
 
@@ -608,6 +714,9 @@ class PhaseDiagram5D:
         )
 
         if len(slice_data) > 0:
+            # Record pre-downsample count for adaptive alpha calculation
+            n_slice = len(slice_data)
+
             # Downsample — apply the same random indices to both arrays
             if len(slice_data) > max_points:
                 rng = np.random.default_rng(42)
@@ -623,7 +732,10 @@ class PhaseDiagram5D:
             rgba = self._map_colors(values, alpha=alpha, stability=stab_slice)
 
             if render == "surface":
-                self._render_surface(ax3d, pts, rgba, values, stab_slice, **kwargs)
+                self._render_surface(
+                    ax3d, pts, rgba, values, stab_slice,
+                    _n_slice=n_slice, **kwargs
+                )
             else:  # 'scatter' (default)
                 self._render_scatter(ax3d, pts, rgba, marker_size, **kwargs)
 
@@ -651,6 +763,203 @@ class PhaseDiagram5D:
             self._add_phase_legend(fig)
 
         return fig, ax3d
+
+    def save_frame_pv(
+        self,
+        x0: float,
+        out_path: str,
+        mode: str = "fixed",
+        shape_alpha: Optional[float] = None,
+        window_size: Tuple[int, int] = (1400, 1000),
+        camera_position=None,
+        show_wireframe: bool = True,
+        show_vertex_labels: bool = True,
+        max_points: int = 50000,
+    ) -> int:
+        """
+        Render a single PyVista frame and save it as a PNG.
+
+        This is the PyVista equivalent of :meth:`plot_frame`.  It renders
+        off-screen using PyVista's VTK backend with smooth shading and proper
+        lighting, then writes the result directly to *out_path*.
+
+        Parameters
+        ----------
+        x0 : float
+            Composition value for the fifth component (0 ≤ x0 ≤ 1).
+        out_path : str
+            Destination PNG file path.
+        mode : {'fixed', 'shrink_center', 'shrink_corner'}
+            Tetrahedron scaling mode (same as :meth:`plot_frame`).
+        shape_alpha : float or None
+            Alpha-shape tightness.  When *None* (default) the value is
+            computed adaptively as::
+
+                shape_alpha = 90 × (N / 62196)^(1/3)
+
+            where *N* is the number of points in the x₀ slice.  Pass an
+            explicit float to override (e.g. ``shape_alpha=90``).
+        window_size : (width, height)
+            Off-screen render resolution in pixels.
+        camera_position : list or None
+            PyVista camera position triple ``[position, focal_point, up]``.
+            Defaults to a front-right elevated view of the tetrahedron.
+        show_wireframe : bool
+            Draw the tetrahedron edges.
+        show_vertex_labels : bool
+            Label each vertex with its component name.
+        max_points : int
+            Maximum points per phase class (random sub-sample if exceeded).
+
+        Returns
+        -------
+        int
+            Number of points in the x₀ slice (useful for progress logging).
+
+        Raises
+        ------
+        ImportError
+            If ``pyvista`` is not installed.
+        """
+        try:
+            import pyvista as pv
+        except ImportError as exc:
+            raise ImportError(
+                "render='surface_pv' requires PyVista.\n"
+                "Install it with:  pip install pyvista"
+            ) from exc
+
+        # ── slice data ────────────────────────────────────────────────────
+        x0_mask    = np.abs(self.data[:, 0] - x0) <= self.tolerance
+        slice_data = self.data[x0_mask]
+        stab_slice = (
+            self._stability_data[x0_mask]
+            if self._stability_data is not None else None
+        )
+        n_total = len(slice_data)
+
+        # ── adaptive alpha ────────────────────────────────────────────────
+        if shape_alpha is None:
+            sa = _ALPHA_REF_PV * (n_total / _N_REF) ** (1.0 / 3.0)
+        else:
+            sa = float(shape_alpha)
+
+        # ── coordinate mapping ────────────────────────────────────────────
+        def _slice_to_coords(sd):
+            x1, x2, x3, x4 = (sd[:, k] for k in range(1, 5))
+            return compositions_to_cartesian(x1, x2, x3, x4, x0=x0, mode=mode)
+
+        # ── plotter setup ─────────────────────────────────────────────────
+        pv.global_theme.background = "white"
+        pl = pv.Plotter(off_screen=True, window_size=list(window_size))
+        pl.set_background("white")
+
+        # ── surfaces ──────────────────────────────────────────────────────
+        if self.value_type == "phase_stability":
+            values_sl = slice_data[:, 5].astype(int)
+            for label in (-1, 0):
+                face_op = self._phase_alphas.get(label, 0.0)
+                if face_op < 1e-3:
+                    continue
+                mask = values_sl == label
+                sub = slice_data[mask]
+                if len(sub) < 4:
+                    continue
+                if len(sub) > max_points:
+                    rng = np.random.default_rng(42)
+                    sub = sub[rng.choice(len(sub), max_points, replace=False)]
+                pts = _slice_to_coords(sub)
+                boundary = _alpha_boundary_faces(pts, sa)
+                if len(boundary) == 0:
+                    continue
+                faces_pv = np.hstack([
+                    np.full((len(boundary), 1), 3, dtype=np.int32),
+                    boundary.astype(np.int32),
+                ])
+                mesh = pv.PolyData(pts, faces_pv)
+                color = self._phase_colors.get(label, (0.5, 0.5, 0.5))
+                pl.add_mesh(
+                    mesh, color=color, opacity=face_op,
+                    smooth_shading=True, show_edges=False, lighting=True,
+                    specular=0.3, specular_power=15, diffuse=0.8, ambient=0.2,
+                )
+
+        else:
+            # Continuous or combined mode: one surface for all visible points
+            if len(slice_data) > max_points:
+                rng = np.random.default_rng(42)
+                idx = rng.choice(len(slice_data), max_points, replace=False)
+                slice_data = slice_data[idx]
+                if stab_slice is not None:
+                    stab_slice = stab_slice[idx]
+            pts    = _slice_to_coords(slice_data)
+            values = slice_data[:, 5]
+            rgba   = self._map_colors(values, alpha=0.65, stability=stab_slice)
+            visible = rgba[:, 3] > 1e-3
+            if visible.sum() >= 4:
+                boundary = _alpha_boundary_faces(pts[visible], sa)
+                if len(boundary) > 0:
+                    faces_pv = np.hstack([
+                        np.full((len(boundary), 1), 3, dtype=np.int32),
+                        boundary.astype(np.int32),
+                    ])
+                    mesh  = pv.PolyData(pts[visible], faces_pv)
+                    color = tuple(float(c) for c in rgba[visible].mean(axis=0)[:3])
+                    pl.add_mesh(
+                        mesh, color=color, opacity=float(rgba[visible, 3].mean()),
+                        smooth_shading=True, show_edges=False, lighting=True,
+                        specular=0.3, specular_power=15, diffuse=0.8, ambient=0.2,
+                    )
+
+        # ── wireframe ─────────────────────────────────────────────────────
+        if show_wireframe:
+            verts = tetrahedron_display_vertices(x0, mode)
+            for i, j in EDGES:
+                pl.add_mesh(pv.Line(verts[i], verts[j]), color="black", line_width=2)
+
+        # ── vertex labels ─────────────────────────────────────────────────
+        if show_vertex_labels:
+            verts = tetrahedron_display_vertices(x0, mode)
+            centroid_3d = verts.mean(axis=0)
+            labels = self.component_labels[1:]   # x1…x4
+            for i, lbl in enumerate(labels):
+                push = _PV_LABEL_PUSH[i] if i < len(_PV_LABEL_PUSH) else 0.10
+                pos  = verts[i] + push * (verts[i] - centroid_3d)
+                pl.add_point_labels(
+                    [pos], [lbl],
+                    font_size=18, text_color="black", bold=True,
+                    show_points=False, always_visible=True,
+                    shape="rect", shape_color="white", shape_opacity=1.0,
+                )
+
+        # ── camera ────────────────────────────────────────────────────────
+        cam = camera_position or [_PV_CAM_POS, _PV_FOCAL, _PV_CAM_UP]
+        pl.camera_position = cam
+
+        # ── title ─────────────────────────────────────────────────────────
+        x0_label = self.component_labels[0]
+        pl.add_text(
+            f"x({x0_label}) = {x0:.3f}",
+            position="upper_left", font_size=14, color="black",
+        )
+
+        # ── legend ────────────────────────────────────────────────────────
+        if self.value_type == "phase_stability":
+            pl.add_legend(
+                labels=[
+                    ("Unstable",    self._phase_colors.get(-1, (0.25, 0.25, 0.25))),
+                    ("Meta-stable", self._phase_colors.get( 0, (0.75, 0.75, 0.75))),
+                    ("Stable",      (1.0, 1.0, 1.0)),
+                ],
+                bcolor=(0.80, 0.80, 0.80),
+                border=True,
+                size=(0.24, 0.13),
+                loc="lower left",
+            )
+
+        pl.screenshot(out_path, transparent_background=False)
+        pl.close()
+        return n_total
 
     def save_frames(
         self,
@@ -684,17 +993,31 @@ class PhaseDiagram5D:
         os.makedirs(output_dir, exist_ok=True)
         paths: List[str] = []
 
+        render = plot_kwargs.get("render", "scatter")
+        w = len(str(len(x0_values)))
+
         for i, x0 in enumerate(x0_values):
-            fig, _ = self.plot_frame(x0, dpi=dpi, **plot_kwargs)
             path = os.path.join(output_dir, f"frame_{i:04d}.png")
-            fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
-            plt.close(fig)
+
+            if render == "surface_pv":
+                # PyVista path — extract relevant kwargs, write PNG directly
+                pv_keys = ("mode", "shape_alpha", "window_size",
+                           "camera_position", "show_wireframe",
+                           "show_vertex_labels", "max_points")
+                pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
+                n_slice = self.save_frame_pv(x0, path, **pv_kw)
+            else:
+                # matplotlib path (scatter / surface)
+                fig, _ = self.plot_frame(x0, dpi=dpi, **plot_kwargs)
+                fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
+                plt.close(fig)
+                n_slice = len(extract_x0_slice(self.data, x0, self.tolerance))
+
             paths.append(os.path.abspath(path))
 
             if verbose:
-                n_slice = len(extract_x0_slice(self.data, x0, self.tolerance))
                 print(
-                    f"  [{i + 1:>{len(str(len(x0_values)))}}/{len(x0_values)}] "
+                    f"  [{i + 1:>{w}}/{len(x0_values)}] "
                     f"x0 = {x0:.3f}  ({n_slice} points)  -> {path}"
                 )
 

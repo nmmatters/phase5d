@@ -45,7 +45,7 @@ x₀ = 0.40  →  60 % of the range remains
 x₀ = 1.00  →  single point      (pure Fe)
 ```
 
-Scatter frames include a scale bar below the tetrahedron that encodes x₀ visually.
+Both render modes show a `x(component) = value` text label in the top-left corner of each frame.
 
 ---
 
@@ -158,7 +158,7 @@ Three modes control how the tetrahedron is scaled as x₀ changes:
 
 | Mode | Description |
 |------|-------------|
-| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. In scatter mode a scale bar shows x₀; surface mode shows only the tetrahedron. Easiest to read in a video. |
+| `'fixed'` **(default)** | Tetrahedron always fills the full viewport. x₀ is shown as a text label in the top-left corner. Easiest to read in a video. |
 | `'shrink_center'` | Tetrahedron shrinks by factor `(1−x₀)` around its centroid. |
 | `'shrink_corner'` | Tetrahedron shrinks toward the origin (pure-x₀ corner). |
 
@@ -327,7 +327,7 @@ PhaseDiagram5D(
 | `marker_size` | `3` | Scatter marker size (pt²) |
 | `max_points` | `15000` | Max points rendered (random sub-sample) |
 | `show_wireframe` | `True` | Draw tetrahedron edges |
-| `wireframe_alpha` | `0.20` | Wireframe transparency |
+| `wireframe_alpha` | `0.85` | Wireframe transparency |
 | `wireframe_color` | `'black'` | Wireframe edge color |
 | `show_vertex_labels` | `True` | Show component names at vertices |
 | `elev`, `azim` | `20`, `45` | Camera angles (°) |

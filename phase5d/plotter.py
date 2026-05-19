@@ -336,7 +336,7 @@ class PhaseDiagram5D:
                 [verts[i, 2], verts[j, 2]],
                 color=wireframe_color,
                 alpha=wireframe_alpha,
-                linewidth=0.9,
+                linewidth=1.8,
             )
 
     def _label_vertices(self, ax: Axes3D, mode: str, x0: float) -> None:
@@ -354,7 +354,7 @@ class PhaseDiagram5D:
             ax.text(
                 pos[0], pos[1], pos[2],
                 label,
-                fontsize=11,
+                fontsize=14,
                 ha="center",
                 va="center",
                 fontweight="bold",
@@ -421,16 +421,15 @@ class PhaseDiagram5D:
                 facecolor=(r, g, b, a),
                 edgecolor="gray",
                 linewidth=0.5,
-                label=f"{labels[label]} ({label:+d})",
+                label=labels[label],
             )
             handles.append(patch)
         fig.legend(
             handles=handles,
-            loc="upper right",
-            fontsize=8,
-            framealpha=0.85,
-            title="Phase stability",
-            title_fontsize=8,
+            loc="lower left",
+            bbox_to_anchor=(0.02, 0.02),
+            fontsize=9,
+            frameon=False,
         )
 
     # ------------------------------------------------------------------
@@ -600,12 +599,12 @@ class PhaseDiagram5D:
         marker_size: float = 3,
         max_points: int = 15000,
         show_wireframe: bool = True,
-        wireframe_alpha: float = 0.20,
+        wireframe_alpha: float = 0.85,
         wireframe_color: str = "black",
         show_vertex_labels: bool = True,
         elev: float = 20,
         azim: float = 45,
-        figsize: Tuple[float, float] = (8, 9),
+        figsize: Tuple[float, float] = (8, 8),
         title: Optional[str] = None,
         dpi: int = 100,
         **kwargs,
@@ -685,8 +684,8 @@ class PhaseDiagram5D:
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
 
-        # 3-D axes — leave bottom strip for scale bar
-        ax3d: Axes3D = fig.add_axes([0.02, 0.10, 0.84, 0.86], projection="3d")
+        # 3-D axes — full figure, right strip reserved for colorbar
+        ax3d: Axes3D = fig.add_axes([0.02, 0.02, 0.84, 0.95], projection="3d")
         ax3d.view_init(elev=elev, azim=azim)
         ax3d.set_axis_off()
 
@@ -743,9 +742,13 @@ class PhaseDiagram5D:
         ax3d.set_ylim(VERTICES[:, 1].min() - buf, VERTICES[:, 1].max() + buf)
         ax3d.set_zlim(VERTICES[:, 2].min() - buf, VERTICES[:, 2].max() + buf)
 
-        # Scale bar
-        ax_bar = fig.add_axes([0.08, 0.02, 0.76, 0.06])
-        self._draw_scale_bar(ax_bar, x0)
+        # x₀ label — top-left text, matching PyVista surface render style
+        x0_lbl = self.component_labels[0]
+        fig.text(
+            0.03, 0.97,
+            f"x({x0_lbl}) = {x0:.3f}",
+            fontsize=12, va="top", ha="left", color="black",
+        )
 
         # Legend / colorbar
         if self.value_type == "continuous":
@@ -1396,7 +1399,7 @@ class PhaseDiagram5D:
         marker_size: float = 3,
         max_points: int = 5000,
         show_wireframe: bool = True,
-        wireframe_alpha: float = 0.20,
+        wireframe_alpha: float = 0.85,
         wireframe_color: str = "black",
         show_vertex_labels: bool = True,
         elev: float = 20,

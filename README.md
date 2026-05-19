@@ -118,16 +118,31 @@ pd5.create_video(
 
 ## Data format
 
-```
-data : np.ndarray, shape (N, 5)
+Two input formats are supported, controlled by the `x0` parameter:
 
+**`x0='implicit'` (default) — shape (N, 5)**
+
+```
   col 0 → x1   composition of component 1
   col 1 → x2   composition of component 2
   col 2 → x3   composition of component 3
   col 3 → x4   composition of component 4
   col 4 → value  scalar property or phase label
 
-  x0 = 1 − x1 − x2 − x3 − x4   (implicit, not stored)
+  x0 = 1 − x1 − x2 − x3 − x4   (computed automatically)
+```
+
+**`x0='explicit'` — shape (N, 6)**
+
+```
+  col 0 → x0   composition of component 0  (the sweep axis)
+  col 1 → x1   composition of component 1
+  col 2 → x2   composition of component 2
+  col 3 → x3   composition of component 3
+  col 4 → x4   composition of component 4
+  col 5 → value  scalar property or phase label
+
+  x0 + x1 + x2 + x3 + x4 must be ≤ 1 for all rows
 ```
 
 The library handles regular grids (e.g. 0.01 step) and arbitrary scattered
@@ -287,6 +302,7 @@ show them faintly.
 ```python
 PhaseDiagram5D(
     data,
+    x0               = 'implicit',            # 'implicit' (N×5) | 'explicit' (N×6)
     value_type       = 'continuous',          # 'continuous' | 'phase_stability'
     colormap         = 'viridis',             # matplotlib colormap name
     vmin             = None,                  # float or None
@@ -295,6 +311,8 @@ PhaseDiagram5D(
     component_labels = ['x₀','x₁','x₂','x₃','x₄'],
     phase_colors     = None,                  # dict {label: (R,G,B)}
     phase_alphas     = None,                  # dict {label: alpha}
+    value_label      = '',                    # colorbar label, e.g. 'Gm'
+    value_unit       = '',                    # colorbar unit,  e.g. 'J/mol'
 )
 ```
 
@@ -310,6 +328,7 @@ PhaseDiagram5D(
 | `max_points` | `15000` | Max points rendered (random sub-sample) |
 | `show_wireframe` | `True` | Draw tetrahedron edges |
 | `wireframe_alpha` | `0.20` | Wireframe transparency |
+| `wireframe_color` | `'black'` | Wireframe edge color |
 | `show_vertex_labels` | `True` | Show component names at vertices |
 | `elev`, `azim` | `20`, `45` | Camera angles (°) |
 | `figsize` | `(8, 9)` | Figure size (inches) |
@@ -402,8 +421,12 @@ Opens a **live matplotlib window** with three slider widgets:
 
 All `plot_frame` keyword arguments (`alpha`, `marker_size`, `show_wireframe`,
 `wireframe_alpha`, `wireframe_color`, `show_vertex_labels`, `figsize`,
-`render`, `**kwargs`) are accepted.  The colorbar / legend is created once
-at startup and does not flicker on slider updates.
+`**kwargs`) are accepted.  The colorbar / legend is created once at startup
+and does not flicker on slider updates.
+
+> **Note**: `render='surface'` (PyVista) is **not** supported in the
+> interactive viewer — only `render='scatter'` (default).  Use
+> `create_video(..., render='surface')` for surface-rendered output.
 
 > **Note**: requires an interactive matplotlib backend.  If you are inside a
 > Jupyter notebook, run `%matplotlib widget` (or `qt`) first.  In a plain

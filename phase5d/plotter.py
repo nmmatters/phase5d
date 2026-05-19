@@ -790,12 +790,15 @@ class PhaseDiagram5D:
             Alpha-shape tightness.  When *None* (default) the value is
             computed adaptively as::
 
-                shape_alpha = 90 × (N_eff / 50000)^(1/3)
+                shape_alpha = 90 × (N / 62196)^(1/3)
 
-            where *N_eff* = min(N, max_points) is the actual number of
-            points fed into the Delaunay triangulation after subsampling.
-            This keeps the circumradius threshold matched to the true point
-            density.  Pass an explicit float to override.
+            where *N* is the total number of points in the x₀ slice (all
+            points, no subsampling).  62 196 is the reference count at
+            x₀ = 0.30 for a step = 0.01 FeMnNiCoCu grid.  This keeps
+            the circumradius threshold proportional to the local grid
+            spacing so surface quality stays consistent as the slice
+            becomes sparser at higher x₀.  Pass an explicit float to
+            override.
         window_size : (width, height)
             Off-screen render resolution in pixels.
         camera_position : list or None

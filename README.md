@@ -2,43 +2,51 @@
 
 **5D phase diagram visualization for high-entropy alloys.**
 
-`phase5d` renders the full composition space of a five-component alloy system
-as a sequence of tetrahedron figures — one per x₀ slice — that can be
-assembled into a video.  Each frame is a regular tetrahedron whose four
-vertices represent the four independent composition axes (x₁ – x₄).  The
-fifth axis, x₀, is displayed via a scale bar below the tetrahedron.
-
----
-
-## Concept
-
-A five-component alloy (x₀, x₁, x₂, x₃, x₄) satisfies the constraint
-
-```
-x₀ + x₁ + x₂ + x₃ + x₄ = 1
-```
-
-For a fixed x₀ value the remaining four components satisfy
-`x₁ + x₂ + x₃ + x₄ = 1 − x₀`, which forms a **3-simplex (tetrahedron)**.
-By sweeping x₀ from 0 → 1 and rendering one frame per step, the full 5D
-phase space is explored.
-
-```
-x₀ = 0.00  →  full tetrahedron  (scale = 1.00)
-x₀ = 0.40  →  same tetrahedron, 60 % of composition range active
-x₀ = 1.00  →  single point      (scale = 0.00)
-```
-
-The scale bar at the bottom of each frame encodes this information visually.
+Five-component alloy systems (HEAs) have a composition space too large to
+visualize in a single plot.  `phase5d` solves this by slicing the 5D simplex
+along one composition axis x₀ and rendering each slice as a 3D tetrahedron —
+then sweeping x₀ from 0 → 1 to produce a video of the complete phase space.
 
 ---
 
 ## Demo
 
-FeMnNiCoCu phase stability at 873 K — full x(Fe) sweep 0.00 → 1.00, step = 0.01.
-Rendered with `render='surface'` (PyVista, adaptive alpha-shape).
+<video src="media/femnnicopha_surface_873k_full.mp4" width="100%" autoplay loop muted playsinline controls></video>
 
-https://github.com/nmmatters/phase5d/raw/main/media/femnnicopha_surface_873k_full.mp4
+**FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0 % to 100 %
+in steps of 1 mol%.  Each frame is a cross-section of the four-component
+(Mn–Ni–Co–Cu) composition space at fixed Fe content.
+
+| Color | Phase |
+|-------|-------|
+| Dark gray (opaque) | Unstable |
+| Light gray (semi-transparent) | Meta-stable |
+| Transparent | Stable single-phase region |
+
+The tetrahedron stays at full size throughout (`mode='fixed'`); the scale bar
+below shows the fraction of the composition space that is active.  Rendered
+with PyVista alpha-shape surfaces (`render='surface'`, adaptive alpha, 101 frames).
+
+---
+
+## Concept
+
+A five-component alloy (x₀, x₁, x₂, x₃, x₄) satisfies the simplex constraint
+
+```
+x₀ + x₁ + x₂ + x₃ + x₄ = 1
+```
+
+For a fixed x₀, the remaining four components form a **3-simplex (tetrahedron)**.
+Sweeping x₀ from 0 → 1 explores the full 5D phase space one slice at a time:
+
+```
+x₀ = 0.00  →  full tetrahedron  (all Mn–Ni–Co–Cu compositions available)
+x₀ = 0.40  →  60 % of the range remains
+x₀ = 1.00  →  single point      (pure Fe)
+```
+
+The scale bar at the bottom of each frame encodes x₀ visually.
 
 ---
 

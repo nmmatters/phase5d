@@ -675,7 +675,7 @@ class PhaseDiagram5D:
                 f"render={render!r} is not supported by plot_frame.  "
                 "plot_frame only supports render='scatter' (matplotlib).  "
                 "For surface rendering use create_video(..., render='surface') "
-                "or save_frame_pv()."
+                "or save_frame_surface()."
             )
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
@@ -753,7 +753,7 @@ class PhaseDiagram5D:
 
         return fig, ax3d
 
-    def save_frame_pv(
+    def save_frame_surface(
         self,
         x0: float,
         out_path: str,
@@ -766,11 +766,11 @@ class PhaseDiagram5D:
         max_points: int = 50000,
     ) -> int:
         """
-        Render a single PyVista frame and save it as a PNG.
+        Render a single surface frame via PyVista and save it as a PNG.
 
-        This is the PyVista equivalent of :meth:`plot_frame`.  It renders
-        off-screen using PyVista's VTK backend with smooth shading and proper
-        lighting, then writes the result directly to *out_path*.
+        This is the surface-rendering equivalent of :meth:`plot_frame`.  It
+        renders off-screen using PyVista's VTK backend with smooth shading and
+        proper lighting, then writes the result directly to *out_path*.
 
         Parameters
         ----------
@@ -814,7 +814,7 @@ class PhaseDiagram5D:
             import pyvista as pv
         except ImportError as exc:
             raise ImportError(
-                "render='surface' requires PyVista.\n"
+                "render='surface' requires PyVista.  "
                 "Install it with:  pip install pyvista"
             ) from exc
 
@@ -984,16 +984,11 @@ class PhaseDiagram5D:
 
         render = plot_kwargs.get("render", "scatter")
 
-        # 'surface_pv' is a deprecated alias for 'surface'
-        if render == "surface_pv":
-            import warnings
-            warnings.warn(
-                "render='surface_pv' is deprecated; use render='surface' instead.",
-                DeprecationWarning, stacklevel=3,
+        if render not in ("scatter", "surface"):
+            raise ValueError(
+                f"render={render!r} is not supported.  "
+                "Use render='scatter' (matplotlib) or render='surface' (PyVista)."
             )
-            render = "surface"
-            plot_kwargs = dict(plot_kwargs)
-            plot_kwargs["render"] = "surface"
 
         w = len(str(len(x0_values)))
 
@@ -1006,7 +1001,7 @@ class PhaseDiagram5D:
                            "camera_position", "show_wireframe",
                            "show_vertex_labels", "max_points")
                 pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
-                n_slice = self.save_frame_pv(x0, path, **pv_kw)
+                n_slice = self.save_frame_surface(x0, path, **pv_kw)
             else:
                 # matplotlib path (scatter)
                 fig, _ = self.plot_frame(x0, dpi=dpi, **plot_kwargs)
@@ -1063,9 +1058,9 @@ class PhaseDiagram5D:
             - ``render='scatter'`` *(default)* — matplotlib scatter plot;
               kwargs forwarded to :meth:`plot_frame`.
             - ``render='surface'`` — PyVista surface plot (recommended for
-              publication quality); kwargs forwarded to :meth:`save_frame_pv`.
-              Pass ``shape_alpha=<float>`` to override adaptive alpha.
-            - ``render='surface_pv'`` — deprecated alias for ``'surface'``.
+              publication quality); kwargs forwarded to
+              :meth:`save_frame_surface`.  Pass ``shape_alpha=<float>`` to
+              override the default adaptive alpha.
 
         Returns
         -------

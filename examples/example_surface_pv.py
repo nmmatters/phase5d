@@ -1,7 +1,7 @@
 """
-Example: high-quality PyVista surface rendering for FeMnNiCoCu at 873 K.
+Example: high-quality surface rendering for FeMnNiCoCu at 873 K.
 
-Demonstrates render='surface_pv' — PyVista's VTK backend with smooth shading,
+Demonstrates render='surface' — PyVista's VTK backend with smooth shading,
 proper lighting, and adaptive alpha-shape concave hull surfaces.
 
 Two data paths are supported:
@@ -105,7 +105,7 @@ pd5 = PhaseDiagram5D(
 # ── Single PyVista frame ───────────────────────────────────────────────────────
 print("Rendering single PyVista frame (x0=0.30) ...")
 t1 = time.time()
-n  = pd5.save_frame_pv(
+n  = pd5.save_frame_surface(
     x0=0.30,
     out_path=os.path.join(OUT_DIR, "femnnicopha_pv_x0_0.30.png"),
     # shape_alpha is adaptive by default (90 * (N/62196)^(1/3))

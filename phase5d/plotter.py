@@ -112,8 +112,8 @@ def _alpha_boundary_faces(pts: np.ndarray, shape_alpha: float):
 # Matplotlib backend: no max_points cap, calibrated at x0=0.30 (62 196 pts).
 _ALPHA_REF_MPL = 2.0
 _ALPHA_REF_PV  = 90.0
-_N_REF_MPL     = 62_196
-_N_REF_PV      = 50_000   # == default max_points for save_frame_surface
+_N_REF_MPL     = 62_196   # matplotlib: no subsampling, calibrated at x0=0.30
+_N_REF_PV      = 62_196   # PyVista: no per-phase subsampling, calibrated at x0=0.30
 
 # PyVista camera / label defaults (work for any 5-component tetrahedron)
 _PV_CAM_POS = np.array([3.0, -2.0, 1.4])
@@ -835,11 +835,12 @@ class PhaseDiagram5D:
         n_total = len(slice_data)
 
         # ── adaptive alpha ────────────────────────────────────────────────
-        # Use the effective N (after max_points subsampling) so alpha tracks
-        # the actual point density fed into the Delaunay, not the raw slice size.
+        # Use the full slice count (no subsampling) so alpha tracks the true
+        # grid density.  The alpha-shape path uses all points for quality;
+        # max_points is only applied in continuous mode where a scatter-style
+        # representation is used.
         if shape_alpha is None:
-            n_effective = min(n_total, max_points) if max_points is not None else n_total
-            sa = _ALPHA_REF_PV * (n_effective / _N_REF_PV) ** (1.0 / 3.0)
+            sa = _ALPHA_REF_PV * (n_total / _N_REF_PV) ** (1.0 / 3.0)
         else:
             sa = float(shape_alpha)
 
@@ -864,9 +865,6 @@ class PhaseDiagram5D:
                 sub = slice_data[mask]
                 if len(sub) < 4:
                     continue
-                if len(sub) > max_points:
-                    rng = np.random.default_rng(42)
-                    sub = sub[rng.choice(len(sub), max_points, replace=False)]
                 pts = _slice_to_coords(sub)
                 boundary = _alpha_boundary_faces(pts, sa)
                 if len(boundary) == 0:

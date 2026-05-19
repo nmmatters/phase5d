@@ -173,16 +173,22 @@ def _add_pv_scale_bar(
     ax_b.axis("off")
 
     bar_y, bar_h = 0.18, 0.52
+    lbl_y = bar_y - 0.10   # y position for all tick labels (below bar)
+
     ax_b.barh(bar_y, 1.0,   left=0.0, height=bar_h,
               color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
     if scale > 0:
         ax_b.barh(bar_y, scale, left=0.0, height=bar_h,
                   color="#4477aa", edgecolor="#888888", linewidth=0.8)
 
-    ax_b.text(0.0, 0.03, "0", ha="left",  va="bottom",
-              fontsize=7, transform=ax_b.transAxes)
-    ax_b.text(1.0, 0.03, "1", ha="right", va="bottom",
-              fontsize=7, transform=ax_b.transAxes)
+    # Vertical tick lines at 0.1, 0.2, …, 0.9 + endpoint labels
+    ax_b.text(0.0, lbl_y, "0", ha="left",  va="top", fontsize=7)
+    ax_b.text(1.0, lbl_y, "1", ha="right", va="top", fontsize=7)
+    for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        tc = "white" if t <= scale + 1e-6 else "#888888"
+        ax_b.plot([t, t], [bar_y, bar_y + bar_h],
+                  color=tc, linewidth=0.9, zorder=3)
+        ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="top", fontsize=7)
     ax_b.text(
         0.5, 0.97,
         f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
@@ -455,6 +461,7 @@ class PhaseDiagram5D:
 
         bar_y = 0.28
         bar_h = 0.46
+        lbl_y = bar_y - 0.08   # y position for all tick labels (below bar)
 
         # Gray background (full composition range 0 → 1)
         ax.barh(bar_y, 1.0, left=0.0, height=bar_h,
@@ -464,11 +471,16 @@ class PhaseDiagram5D:
             ax.barh(bar_y, scale, left=0.0, height=bar_h,
                     color="#4477aa", edgecolor="#888888", linewidth=0.8)
 
-        # Tick labels at the endpoints
-        ax.text(0.0, 0.04, "0", ha="left",  va="bottom", fontsize=7,
-                transform=ax.transAxes)
-        ax.text(1.0, 0.04, "1", ha="right", va="bottom", fontsize=7,
-                transform=ax.transAxes)
+        # Vertical tick lines at 0.1, 0.2, …, 0.9 + endpoint labels
+        ax.text(0.0, lbl_y, "0", ha="left",   va="top", fontsize=6)
+        ax.text(1.0, lbl_y, "1", ha="right",  va="top", fontsize=6)
+        for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+            # White on blue portion, gray on the empty portion
+            tc = "white" if t <= scale + 1e-6 else "#888888"
+            ax.plot([t, t], [bar_y, bar_y + bar_h],
+                    color=tc, linewidth=0.9, zorder=3)
+            ax.text(t, lbl_y, f"{t:.1f}",
+                    ha="center", va="top", fontsize=6)
 
         # Header: show scale value so the bar is self-explanatory
         lbl = self.component_labels[0]

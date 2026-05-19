@@ -33,6 +33,15 @@ The scale bar at the bottom of each frame encodes this information visually.
 
 ---
 
+## Demo
+
+FeMnNiCoCu phase stability at 873 K — full x(Fe) sweep 0.00 → 1.00, step = 0.01.
+Rendered with `render='surface'` (PyVista, adaptive alpha-shape).
+
+https://github.com/nmmatters/phase5d/raw/main/media/femnnicopha_surface_873k_full.mp4
+
+---
+
 ## Installation
 
 ### Requirements

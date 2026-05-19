@@ -41,5 +41,9 @@ Thumbs.db
 *.vtu
 frames/
 
+# Except curated showcase assets in media/
+!media/*.mp4
+!media/*.png
+
 # Ad-hoc test / scratch scripts at repo root
 test_*.py

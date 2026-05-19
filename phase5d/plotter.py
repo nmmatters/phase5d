@@ -172,8 +172,8 @@ def _add_pv_scale_bar(
     ax_b.set_ylim(0, 1)
     ax_b.axis("off")
 
-    bar_y, bar_h = 0.18, 0.52
-    lbl_y = bar_y - 0.10   # y position for all tick labels (below bar)
+    bar_y, bar_h = 0.24, 0.50
+    lbl_y = bar_y - 0.12   # y position for all tick labels (below bar)
 
     ax_b.barh(bar_y, 1.0,   left=0.0, height=bar_h,
               color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
@@ -187,7 +187,7 @@ def _add_pv_scale_bar(
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         tc = "white" if t <= scale + 1e-6 else "#888888"
         ax_b.plot([t, t], [bar_y, bar_y + bar_h],
-                  color=tc, linewidth=0.9, zorder=3)
+                  color=tc, linewidth=0.9, zorder=3, solid_capstyle="butt")
         ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="top", fontsize=7)
     ax_b.text(
         0.5, 0.97,
@@ -477,8 +477,9 @@ class PhaseDiagram5D:
         for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
             # White on blue portion, gray on the empty portion
             tc = "white" if t <= scale + 1e-6 else "#888888"
+            # solid_capstyle='butt' ensures the line ends flush with the bar edges
             ax.plot([t, t], [bar_y, bar_y + bar_h],
-                    color=tc, linewidth=0.9, zorder=3)
+                    color=tc, linewidth=0.9, zorder=3, solid_capstyle="butt")
             ax.text(t, lbl_y, f"{t:.1f}",
                     ha="center", va="top", fontsize=6)
 

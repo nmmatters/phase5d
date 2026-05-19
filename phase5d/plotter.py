@@ -487,15 +487,14 @@ class PhaseDiagram5D:
         **Default (adaptive):** when ``shape_alpha`` is not supplied, it is
         chosen automatically per frame as::
 
-            shape_alpha = min(2.0,  2.0 × (N / 62196)^(1/3))
+            shape_alpha = 2.0 × (N / 62196)^(1/3)
 
         where *N* is the number of points in the current x₀ slice.  This
         keeps the circumradius threshold proportional to the local grid
-        spacing so surface quality remains consistent as slices become
-        sparser at higher x₀ values, while capping at the reference value
-        for dense slices to avoid over-tightening (surface fragmentation).
-        The reference point (N = 62 196, shape_alpha = 2) corresponds to a
-        step = 0.01 FeMnNiCoCu grid at x₀ = 0.30.
+        spacing so surface quality remains consistent across all frames —
+        tighter for dense slices (small x₀), looser for sparse ones (large
+        x₀).  The reference point (N = 62 196, shape_alpha = 2) corresponds
+        to a step = 0.01 FeMnNiCoCu grid at x₀ = 0.30.
 
         **Manual override:** pass ``shape_alpha=<value>`` to fix the
         threshold across all frames.
@@ -528,12 +527,7 @@ class PhaseDiagram5D:
         n_slice  = int(kwargs.pop("_n_slice", len(pts)))
         _sa_user = kwargs.pop("shape_alpha", None)
         if _sa_user is None:
-            # Scale DOWN for sparser slices; never exceed the reference value
-            # (over-tightening on dense slices fragments the surface).
-            shape_alpha = min(
-                _ALPHA_REF_MPL,
-                _ALPHA_REF_MPL * (n_slice / _N_REF) ** (1.0 / 3.0),
-            )
+            shape_alpha = _ALPHA_REF_MPL * (n_slice / _N_REF) ** (1.0 / 3.0)
         else:
             shape_alpha = float(_sa_user)
 
@@ -790,11 +784,10 @@ class PhaseDiagram5D:
             Alpha-shape tightness.  When *None* (default) the value is
             computed adaptively as::
 
-                shape_alpha = min(90,  90 × (N / 62196)^(1/3))
+                shape_alpha = 90 × (N / 62196)^(1/3)
 
-            where *N* is the number of points in the x₀ slice.  The cap at
-            90 prevents over-tightening on dense slices.  Pass an explicit
-            float to override (e.g. ``shape_alpha=90``).
+            where *N* is the number of points in the x₀ slice.  Pass an
+            explicit float to override (e.g. ``shape_alpha=90``).
         window_size : (width, height)
             Off-screen render resolution in pixels.
         camera_position : list or None
@@ -836,12 +829,7 @@ class PhaseDiagram5D:
 
         # ── adaptive alpha ────────────────────────────────────────────────
         if shape_alpha is None:
-            # Scale DOWN for sparser slices; never exceed the reference value
-            # (over-tightening on dense slices fragments the surface).
-            sa = min(
-                _ALPHA_REF_PV,
-                _ALPHA_REF_PV * (n_total / _N_REF) ** (1.0 / 3.0),
-            )
+            sa = _ALPHA_REF_PV * (n_total / _N_REF) ** (1.0 / 3.0)
         else:
             sa = float(shape_alpha)
 

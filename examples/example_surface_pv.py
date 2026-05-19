@@ -129,7 +129,7 @@ video_path = pd5.create_video(
     x0_values=x0_values,
     output_path=os.path.join(OUT_DIR, "femnnicopha_pv_surface.mp4"),
     fps=10,
-    render="surface_pv",
+    render="surface",
     verbose=True,
 )
 elapsed = time.time() - t_video

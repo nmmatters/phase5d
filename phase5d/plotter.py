@@ -624,14 +624,7 @@ class PhaseDiagram5D:
             - ``'scatter'`` *(default)* — each composition point is drawn as
               an individual marker.  Fast and faithful to the raw data
               distribution; ``marker_size`` and ``max_points`` apply.
-
-            - ``'surface'`` — the convex hull of each phase region is rendered
-              as a solid (or semi-transparent) polygon mesh.  For
-              ``value_type='phase_stability'`` a separate hull is built for
-              each stability class.  For ``value_type='continuous'`` (or
-              combined mode) hull faces are colored by the mean scalar value
-              of their vertices, taken from the diagram colormap.
-              Requires ``scipy``.
+              Uses the matplotlib backend.
 
         fig : matplotlib Figure or None
             Re-use an existing figure if provided; otherwise a new one is created.
@@ -666,27 +659,23 @@ class PhaseDiagram5D:
 
             - ``render='scatter'`` → forwarded to ``Axes3D.scatter``
               (e.g. ``marker='^'``, ``edgecolors='k'``, ``linewidths=0.5``).
-            - ``render='surface'`` → forwarded to ``Poly3DCollection``
-              (e.g. ``edgecolor='white'``, ``linewidth=0.2``).
-              Pass ``shape_alpha=<float>`` to override the default adaptive
-              alpha (see :meth:`_render_surface` for details).
 
             These kwargs are also accepted by :meth:`save_frames` and
             :meth:`create_video`, which forward all extra keyword arguments
-            through to this method.
+            through to this method.  For surface rendering, pass
+            ``shape_alpha=<float>`` to override the adaptive PyVista alpha.
 
         Returns
         -------
         fig : matplotlib Figure
         ax  : mpl_toolkits.mplot3d.Axes3D
         """
-        if render not in ("scatter", "surface", "surface_pv"):
-            raise ValueError("render must be 'scatter', 'surface', or 'surface_pv'.")
-        if render == "surface_pv":
+        if render not in ("scatter",):
             raise ValueError(
-                "render='surface_pv' writes directly to a file and cannot return "
-                "a matplotlib figure.  Use save_frame_pv(x0, out_path) or "
-                "create_video(..., render='surface_pv') instead."
+                f"render={render!r} is not supported by plot_frame.  "
+                "plot_frame only supports render='scatter' (matplotlib).  "
+                "For surface rendering use create_video(..., render='surface') "
+                "or save_frame_pv()."
             )
         if fig is None:
             fig = plt.figure(figsize=figsize, dpi=dpi)
@@ -825,7 +814,7 @@ class PhaseDiagram5D:
             import pyvista as pv
         except ImportError as exc:
             raise ImportError(
-                "render='surface_pv' requires PyVista.\n"
+                "render='surface' requires PyVista.\n"
                 "Install it with:  pip install pyvista"
             ) from exc
 
@@ -994,12 +983,24 @@ class PhaseDiagram5D:
         paths: List[str] = []
 
         render = plot_kwargs.get("render", "scatter")
+
+        # 'surface_pv' is a deprecated alias for 'surface'
+        if render == "surface_pv":
+            import warnings
+            warnings.warn(
+                "render='surface_pv' is deprecated; use render='surface' instead.",
+                DeprecationWarning, stacklevel=3,
+            )
+            render = "surface"
+            plot_kwargs = dict(plot_kwargs)
+            plot_kwargs["render"] = "surface"
+
         w = len(str(len(x0_values)))
 
         for i, x0 in enumerate(x0_values):
             path = os.path.join(output_dir, f"frame_{i:04d}.png")
 
-            if render == "surface_pv":
+            if render == "surface":
                 # PyVista path — extract relevant kwargs, write PNG directly
                 pv_keys = ("mode", "shape_alpha", "window_size",
                            "camera_position", "show_wireframe",
@@ -1007,7 +1008,7 @@ class PhaseDiagram5D:
                 pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
                 n_slice = self.save_frame_pv(x0, path, **pv_kw)
             else:
-                # matplotlib path (scatter / surface)
+                # matplotlib path (scatter)
                 fig, _ = self.plot_frame(x0, dpi=dpi, **plot_kwargs)
                 fig.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="white")
                 plt.close(fig)
@@ -1057,7 +1058,14 @@ class PhaseDiagram5D:
         verbose : bool
             Print progress.
         **plot_kwargs
-            Forwarded to :meth:`plot_frame` (e.g. mode, alpha, marker_size).
+            Forwarded to the renderer.  Common options:
+
+            - ``render='scatter'`` *(default)* — matplotlib scatter plot;
+              kwargs forwarded to :meth:`plot_frame`.
+            - ``render='surface'`` — PyVista surface plot (recommended for
+              publication quality); kwargs forwarded to :meth:`save_frame_pv`.
+              Pass ``shape_alpha=<float>`` to override adaptive alpha.
+            - ``render='surface_pv'`` — deprecated alias for ``'surface'``.
 
         Returns
         -------
@@ -1394,8 +1402,10 @@ class PhaseDiagram5D:
             Starting x₀ value (default 0).
         mode : {'fixed', 'shrink_center', 'shrink_corner'}
             Tetrahedron scaling mode.
-        render : {'scatter', 'surface'}
-            Rendering style.
+        render : {'scatter'}
+            Rendering style.  Only ``'scatter'`` (matplotlib) is supported in
+            the interactive viewer; use :meth:`create_video` for surface
+            rendering.
         alpha : float
             Point / face transparency for continuous values.
         marker_size : float
@@ -1498,12 +1508,7 @@ class PhaseDiagram5D:
                                                  x0=x0, mode=mode)
                 rgba = self._map_colors(vals, alpha=alpha, stability=stab)
 
-                if render == "surface":
-                    self._render_surface(ax3d, pts, rgba, vals, stab,
-                                         **kwargs)
-                else:
-                    self._render_scatter(ax3d, pts, rgba, marker_size,
-                                         **kwargs)
+                self._render_scatter(ax3d, pts, rgba, marker_size, **kwargs)
 
             if show_vertex_labels:
                 self._label_vertices(ax3d, mode, x0)

@@ -237,22 +237,23 @@ point is `shape_alpha ≈ 0.9 / step`.
 
 As x₀ increases toward 1, the available composition space for the remaining
 components shrinks rapidly.  For a step = 0.01 grid on FeMnNiCoCu data, the
-slice at x₀ = 0.85 contains only ~800 points and meaningful alpha-shape
-surfaces cannot be constructed.
+slice at x₀ = 0.85 contains only ~800 points — too few for a reliable
+alpha-shape surface.
 
-The `min_points` parameter (default **500**) controls this gracefully: frames
-below the threshold render the tetrahedron wireframe and vertex labels only
-(no phase surfaces), which is physically correct — the near-pure-Fe region
-simply has no multi-component phase data.
+The `min_points` parameter (default **1000**) controls this: frames below the
+threshold skip surface rendering and show only the tetrahedron wireframe and
+vertex labels.  An empty tetrahedron does **not** imply full phase stability —
+it simply means the data density at that composition is too low to reconstruct
+a meaningful surface.
 
 ```python
-# Default: wireframe-only below 500 points
+# Default: wireframe-only below 1000 points
 pd5.create_video(..., render='surface')
 
-# Raise threshold to cut off earlier (cleaner video)
-pd5.create_video(..., render='surface', min_points=1000)
+# Lower threshold to render more frames (may show artefacts at sparse slices)
+pd5.create_video(..., render='surface', min_points=500)
 
-# Disable threshold (render all frames, may show artefacts near x₀=1)
+# Disable threshold entirely
 pd5.create_video(..., render='surface', min_points=4)
 ```
 
@@ -352,7 +353,7 @@ Renders a single high-quality surface frame off-screen and saves it as a PNG.
 | `show_wireframe` | `True` | Draw tetrahedron edges |
 | `show_vertex_labels` | `True` | Label vertices with component names |
 | `max_points` | `50000` | Max points for continuous mode (no effect on phase_stability) |
-| `min_points` | `500` | Min slice points to attempt surface rendering; below threshold renders wireframe only |
+| `min_points` | `1000` | Min slice points to attempt surface rendering; below threshold renders wireframe only |
 | `markers` | `None` | List of `[x0,x1,x2,x3,x4]` compositions shown as spheres when the frame's x₀ matches within `tolerance` |
 | `tielines` | `None` | List of endpoint pairs `[[x0_A,…],[x0_B,…]]`; the tie-line's intersection with the current x₀ plane is shown as a red sphere |
 | `tietriangles` | `None` | List of N-vertex simplices; each simplex is a list of N compositions `[x0,x1,x2,x3,x4]`. The cross-section with the current x₀ plane is drawn as an orange polygon + spheres. Works for any N ≥ 2 (see below) |

@@ -104,7 +104,6 @@ def _alpha_boundary_faces(pts: np.ndarray, shape_alpha: float):
     return boundary  # (M, 3) int
 
 
-# Adaptive alpha calibration constants
 # Adaptive alpha calibration constants.
 # PyVista backend: calibrated at max_points=50 000 (the actual N fed into
 # Delaunay when a slice has >50 000 points).  For sparse slices (N < 50 000)

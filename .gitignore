@@ -51,3 +51,6 @@ test_*.py
 # Data files (proprietary CALPHAD / simulation output — never commit)
 data/
 *.dat
+
+# uv lock file (lock files belong to applications, not libraries)
+uv.lock

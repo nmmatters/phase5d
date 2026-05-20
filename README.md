@@ -579,6 +579,7 @@ See the [`examples/`](examples/) directory:
 | [`example_phase_stability.py`](examples/example_phase_stability.py) | Phase stability labels, scatter + alpha-shape surface render, video |
 | [`example_isosurface.py`](examples/example_isosurface.py) | Isosurface rendering — single, nested, and rotated views |
 | [`example_surface_pv.py`](examples/example_surface_pv.py) | **Surface rendering** (`render='surface'`, PyVista) — FeMnNiCoCu at 873 K, x(Fe) 0.00→0.40. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
+| [`example_tieline.py`](examples/example_tieline.py) | **Tie-line overlay** — nominal composition marker + two-phase equilibrium tie-line swept across the x₀ window. Uses real TCHEA4 data if present; falls back to synthetic otherwise |
 
 Run from the repository root:
 
@@ -587,6 +588,7 @@ python examples/example_continuous.py
 python examples/example_phase_stability.py
 python examples/example_isosurface.py
 python examples/example_surface_pv.py          # requires: pip install pyvista
+python examples/example_tieline.py            # requires: pip install pyvista
 ```
 
 ---

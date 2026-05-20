@@ -56,59 +56,64 @@ pd5 = PhaseDiagram5D(
 )
 print(f"  Value range: {pd5.vmin:.2f} ... {pd5.vmax:.2f}")
 
-# ── Single isosurface ──────────────────────────────────────────────────────────
-print("\nRendering single isosurface ...")
-fig, ax = pd5.plot_isosurface(
-    level=-1.0,
-    colors=["steelblue"],
-    alpha=0.55,
-    grid_resolution=55,
-    elev=22, azim=40,
-    figsize=(8, 8),
-    title="Isosurface  —  Hmix = -1  (single level)",
-    show_colorbar=True,
-    edgecolor="white",
-    linewidth=0.1,
-)
-out = os.path.join(OUT_DIR, "isosurface_single.png")
-fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-plt.close(fig)
-print(f"Saved: {out}")
+try:
+    # ── Single isosurface ──────────────────────────────────────────────────────
+    print("\nRendering single isosurface ...")
+    fig, ax = pd5.plot_isosurface(
+        level=-1.0,
+        colors=["steelblue"],
+        alpha=0.55,
+        grid_resolution=55,
+        elev=22, azim=40,
+        figsize=(8, 8),
+        title="Isosurface  —  Hmix = -1  (single level)",
+        show_colorbar=True,
+        edgecolor="white",
+        linewidth=0.1,
+    )
+    out = os.path.join(OUT_DIR, "isosurface_single.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"Saved: {out}")
 
-# ── Three nested isosurfaces ───────────────────────────────────────────────────
-print("Rendering three nested isosurfaces ...")
-fig, ax = pd5.plot_isosurface(
-    level=[-2.5, -1.0, 0.5],
-    colors=["royalblue", "gold", "tomato"],
-    alpha=0.38,
-    grid_resolution=60,
-    elev=22, azim=40,
-    figsize=(8, 8),
-    title="Isosurfaces  —  Hmix = -2.5 / -1.0 / +0.5",
-    show_colorbar=True,
-    edgecolor="white",
-    linewidth=0.1,
-)
-out = os.path.join(OUT_DIR, "isosurface_nested.png")
-fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-plt.close(fig)
-print(f"Saved: {out}")
+    # ── Three nested isosurfaces ───────────────────────────────────────────────
+    print("Rendering three nested isosurfaces ...")
+    fig, ax = pd5.plot_isosurface(
+        level=[-2.5, -1.0, 0.5],
+        colors=["royalblue", "gold", "tomato"],
+        alpha=0.38,
+        grid_resolution=60,
+        elev=22, azim=40,
+        figsize=(8, 8),
+        title="Isosurfaces  —  Hmix = -2.5 / -1.0 / +0.5",
+        show_colorbar=True,
+        edgecolor="white",
+        linewidth=0.1,
+    )
+    out = os.path.join(OUT_DIR, "isosurface_nested.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"Saved: {out}")
 
-# ── Different camera angle ─────────────────────────────────────────────────────
-print("Rendering rotated view ...")
-fig, ax = pd5.plot_isosurface(
-    level=[-2.5, -1.0, 0.5],
-    colors=["royalblue", "gold", "tomato"],
-    alpha=0.38,
-    grid_resolution=60,
-    elev=10, azim=150,
-    figsize=(8, 8),
-    title="Isosurfaces  —  rotated view  (elev=10, azim=150)",
-    show_colorbar=True,
-    edgecolor="white",
-    linewidth=0.1,
-)
-out = os.path.join(OUT_DIR, "isosurface_rotated.png")
-fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-plt.close(fig)
-print(f"Saved: {out}")
+    # ── Different camera angle ─────────────────────────────────────────────────
+    print("Rendering rotated view ...")
+    fig, ax = pd5.plot_isosurface(
+        level=[-2.5, -1.0, 0.5],
+        colors=["royalblue", "gold", "tomato"],
+        alpha=0.38,
+        grid_resolution=60,
+        elev=10, azim=150,
+        figsize=(8, 8),
+        title="Isosurfaces  —  rotated view  (elev=10, azim=150)",
+        show_colorbar=True,
+        edgecolor="white",
+        linewidth=0.1,
+    )
+    out = os.path.join(OUT_DIR, "isosurface_rotated.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"Saved: {out}")
+
+except ImportError:
+    print("scipy / scikit-image not installed — skipping isosurface rendering.")
+    print("Install with:  pip install scipy scikit-image")

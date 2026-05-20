@@ -11,7 +11,7 @@ then sweeping x₀ from 0 → 1 to produce a video of the complete phase space.
 
 ## Demo
 
-<video src="media/femnnicocu_phase_stability_surface_873k_full.mp4" width="100%" autoplay loop muted playsinline controls></video>
+<video src="media/femnnicocu_pv_surface.mp4" width="100%" autoplay loop muted playsinline controls></video>
 
 **FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0.00 to 1.00
 in steps of 0.01.  Each frame is a cross-section of the four-component
@@ -330,7 +330,7 @@ PhaseDiagram5D(
 | `wireframe_alpha` | `0.85` | Wireframe transparency |
 | `wireframe_color` | `'black'` | Wireframe edge color |
 | `show_vertex_labels` | `True` | Show component names at vertices |
-| `elev`, `azim` | `20`, `45` | Camera angles (°) |
+| `elev`, `azim` | `20`, `-45` | Camera angles (°) |
 | `figsize` | `(8, 9)` | Figure size (inches) |
 | `title` | `None` | Axes title |
 | `dpi` | `100` | Figure resolution |
@@ -354,34 +354,88 @@ Renders a single high-quality surface frame off-screen and saves it as a PNG.
 | `max_points` | `50000` | Max points for continuous mode (no effect on phase_stability) |
 | `min_points` | `500` | Min slice points to attempt surface rendering; below threshold renders wireframe only |
 | `markers` | `None` | List of `[x0,x1,x2,x3,x4]` compositions shown as spheres when the frame's x₀ matches within `tolerance` |
-| `tielines` | `None` | List of endpoint pairs `[[x0_A,…],[x0_B,…]]`; the tie-line's intersection with the current x₀ plane is shown as a sphere |
-| `marker_color` | `'red'` | Color of marker / tieline spheres |
-| `marker_size` | `18` | Sphere point size in PyVista units |
+| `tielines` | `None` | List of endpoint pairs `[[x0_A,…],[x0_B,…]]`; the tie-line's intersection with the current x₀ plane is shown as a red sphere |
+| `tietriangles` | `None` | List of N-vertex simplices; each simplex is a list of N compositions `[x0,x1,x2,x3,x4]`. The cross-section with the current x₀ plane is drawn as an orange polygon + spheres. Works for any N ≥ 2 (see below) |
+| `marker_color` | `'red'` | Color of marker / tie-line spheres |
+| `marker_size` | `18` | Sphere point size for markers and tie-line intersections |
+| `triangle_color` | `'orange'` | Color of tie-simplex edges and spheres |
+| `triangle_size` | `14` | Sphere point size for tie-simplex intersection points |
 
 Returns the total number of points in the slice.
 
-**Markers and tie-lines example** (nominal composition + two-phase equilibrium):
+---
+
+### Equilibrium phase overlays
+
+`tielines` and `tietriangles` let you overlay multi-phase equilibrium regions on top of any surface frame or video.  As x₀ sweeps through the simplex, the cross-section of each tie-object with the current x₀ plane is computed and drawn automatically.
+
+#### Two-phase equilibrium (tie-line)
+
+Two equilibrium compositions connected by a tie-line.  Where the x₀ plane intersects the line, a single red sphere is shown.
 
 ```python
-NOMINAL = [0.20, 0.10, 0.20, 0.20, 0.30]   # Fe₂₀Mn₁₀Ni₂₀Co₂₀Cu₃₀
-PHASE_A = [0.22, 0.21, 0.21, 0.21, 0.15]   # equilibrium phase A (76 %)
-PHASE_B = [0.00, 0.07, 0.06, 0.01, 0.86]   # equilibrium phase B (24 %)
+NOMINAL = [0.20, 0.10, 0.20, 0.20, 0.30]   # nominal alloy composition
+PHASE_A = [0.22, 0.21, 0.21, 0.21, 0.15]   # equilibrium phase A
+PHASE_B = [0.00, 0.07, 0.06, 0.01, 0.86]   # equilibrium phase B
 
-# Single frame at the nominal composition
 pd5.save_frame_surface(
-    x0=0.20, out_path='frame_nominal.png',
+    x0=0.20, out_path='frame_tieline.png',
     markers=[NOMINAL],
     tielines=[[PHASE_A, PHASE_B]],
 )
 
-# Video sweep over the tie-line window
 pd5.create_video(
     x0_values=np.round(np.arange(0.00, 0.23, 0.01), 3),
-    output_path='tieline_window.mp4',
+    output_path='tieline.mp4',
     fps=3, render='surface',
     markers=[NOMINAL],
     tielines=[[PHASE_A, PHASE_B]],
 )
+```
+
+#### Three-phase equilibrium (tie-triangle)
+
+Three equilibrium compositions forming a tie-triangle.  The x₀ plane intersects up to three edges; the resulting cross-section is rendered as an orange line segment or triangle.
+
+```python
+PHASE_A = [0.05, 0.60, 0.20, 0.10, 0.05]
+PHASE_B = [0.15, 0.20, 0.50, 0.20, 0.10]
+PHASE_C = [0.10, 0.20, 0.15, 0.50, 0.15]
+
+pd5.save_frame_surface(
+    x0=0.10, out_path='frame_tietriangle.png',
+    tietriangles=[[PHASE_A, PHASE_B, PHASE_C]],
+)
+```
+
+<video src="media/femnnicocu_pv_tietriangle.mp4" width="100%" autoplay loop muted playsinline controls></video>
+
+**FeMnNiCoCu tie-triangle example** — three equilibrium phases, x(Fe) swept from 0.00 to 0.24.
+
+#### Four-phase equilibrium (tie-tetrahedron) and beyond
+
+The same `tietriangles` parameter handles any number of equilibrium phases.  Pass a list with four or more compositions and the code automatically enumerates all N(N−1)/2 edges of the simplex.  The cross-section with the x₀ plane gives a convex polygon (line, triangle, quadrilateral, …) drawn in orange.
+
+```python
+# Four equilibrium phases — cross-section at x0=0.50 is a quadrilateral
+PHASE_A = [0.30, 0.60, 0.04, 0.03, 0.03]   # Mn-rich, low-Fe
+PHASE_B = [0.30, 0.04, 0.60, 0.03, 0.03]   # Ni-rich, low-Fe
+PHASE_C = [0.70, 0.04, 0.03, 0.18, 0.05]   # Co-rich, high-Fe
+PHASE_D = [0.70, 0.04, 0.03, 0.05, 0.18]   # Cu-rich, high-Fe
+
+pd5.save_frame_surface(
+    x0=0.50, out_path='frame_4phase.png',
+    tietriangles=[[PHASE_A, PHASE_B, PHASE_C, PHASE_D]],
+)
+```
+
+Multiple independent simplices can be passed in the same list:
+
+```python
+tietriangles=[
+    [PHASE_A, PHASE_B, PHASE_C],          # one tie-triangle
+    [PHASE_D, PHASE_E, PHASE_F, PHASE_G], # one tie-tetrahedron
+]
 ```
 
 #### `.plot_isosurface(level, …)`
@@ -401,7 +455,7 @@ data; `marching_cubes` (scikit-image) extracts the surface(s).
 | `max_points` | `50000` | Max points used for interpolation |
 | `show_wireframe` | `True` | Draw master tetrahedron wireframe |
 | `show_colorbar` | `True` | Add colorbar (continuous mode) |
-| `elev`, `azim` | `20`, `45` | Camera angles (°) |
+| `elev`, `azim` | `20`, `-45` | Camera angles (°) |
 | `figsize` | `(8, 8)` | Figure size (inches) |
 
 Returns `(fig, ax)`.

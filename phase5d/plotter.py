@@ -879,7 +879,7 @@ class PhaseDiagram5D:
         show_wireframe: bool = True,
         show_vertex_labels: bool = True,
         max_points: int = 50000,
-        min_points: int = 500,
+        min_points: int = 1000,
         markers=None,
         tielines=None,
         marker_color: str = "red",

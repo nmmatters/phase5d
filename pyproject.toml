@@ -14,11 +14,11 @@ dependencies = [
     "numpy>=1.24",
     "matplotlib>=3.7",
     "scipy>=1.10",
+    "pyvista>=0.43",
 ]
 
 [project.optional-dependencies]
-surface = ["pyvista>=0.43", "scipy>=1.10"]
-isosurface = ["scipy>=1.10", "scikit-image>=0.19"]
+isosurface = ["scikit-image>=0.19"]
 dev = ["pytest", "pytest-cov"]
 
 [project.urls]

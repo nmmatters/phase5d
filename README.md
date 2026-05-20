@@ -58,9 +58,9 @@ Both render modes show a `x(component) = value` text label in the top-left corne
 | Python  | ≥ 3.9   | |
 | NumPy   | ≥ 1.24  | |
 | Matplotlib | ≥ 3.7 | |
-| SciPy   | ≥ 1.10  | required for `render='surface'` and `plot_isosurface()` |
-| PyVista | ≥ 0.43  | required for `render='surface'` |
-| scikit-image | ≥ 0.19 | required for `plot_isosurface()` only |
+| SciPy   | ≥ 1.10  | |
+| PyVista | ≥ 0.43  | |
+| scikit-image | ≥ 0.19 | required for `plot_isosurface()` only — `pip install phase5d[isosurface]` |
 | **ffmpeg** | any | for video output |
 
 Install ffmpeg via your system package manager:

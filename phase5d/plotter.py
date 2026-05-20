@@ -882,8 +882,11 @@ class PhaseDiagram5D:
         min_points: int = 1000,
         markers=None,
         tielines=None,
+        tietriangles=None,
         marker_color: str = "red",
         marker_size: int = 18,
+        triangle_color: str = "orange",
+        triangle_size: int = 14,
     ) -> int:
         """
         Render a single surface frame via PyVista and save it as a PNG.
@@ -1131,6 +1134,93 @@ class PhaseDiagram5D:
                 render_points_as_spheres=True,
             )
 
+        # Tie-simplex cross-sections — works for any number of equilibrium phases
+        # (tie-line=2, tie-triangle=3, tie-tetrahedron=4, …).
+        # All edges (pairs of vertices) are intersected with the current x0
+        # plane.  The resulting cross-section points are sorted into convex
+        # order and rendered as a closed polygon + spheres in triangle_color.
+        if tietriangles is not None:
+            from itertools import combinations as _comb
+            for tri in tietriangles:
+                verts = [np.asarray(v, dtype=float) for v in tri]
+
+                # ── intersect every edge with the x0 plane ────────────────
+                raw_pts = []
+                for a, b in _comb(verts, 2):
+                    x0_a, x0_b = a[0], b[0]
+                    lo, hi = min(x0_a, x0_b), max(x0_a, x0_b)
+                    if lo - self.tolerance <= x0 <= hi + self.tolerance:
+                        denom = x0_b - x0_a
+                        t = (x0 - x0_a) / denom if abs(denom) > 1e-9 else 0.5
+                        t = float(np.clip(t, 0.0, 1.0))
+                        interp = a + t * (b - a)
+                        pt = compositions_to_cartesian(
+                            np.array([interp[1]]), np.array([interp[2]]),
+                            np.array([interp[3]]), np.array([interp[4]]),
+                            x0=x0, mode=mode,
+                        )
+                        raw_pts.append(pt[0])
+
+                # ── de-duplicate (vertex exactly on the plane) ────────────
+                unique_pts = []
+                for p in raw_pts:
+                    if not any(np.linalg.norm(p - q) < 1e-6 for q in unique_pts):
+                        unique_pts.append(p)
+
+                if not unique_pts:
+                    continue
+
+                # ── sort into convex order for 3+ points ──────────────────
+                # Project onto the local 2-D plane (spanned by the first two
+                # orthogonal directions of the point cloud) and sort by angle
+                # around the centroid so the polygon outline is correct.
+                if len(unique_pts) >= 3:
+                    pts_arr = np.array(unique_pts)
+                    centroid = pts_arr.mean(axis=0)
+                    # Two orthogonal basis vectors in the cutting plane
+                    u = pts_arr[0] - centroid
+                    u_norm = np.linalg.norm(u)
+                    if u_norm > 1e-9:
+                        u /= u_norm
+                    # v = component of (pts[1]-centroid) perpendicular to u
+                    v = pts_arr[1] - centroid
+                    v -= np.dot(v, u) * u
+                    v_norm = np.linalg.norm(v)
+                    if v_norm > 1e-9:
+                        v /= v_norm
+                    angles = [
+                        np.arctan2(np.dot(p - centroid, v),
+                                   np.dot(p - centroid, u))
+                        for p in pts_arr
+                    ]
+                    order = np.argsort(angles)
+                    unique_pts = [unique_pts[i] for i in order]
+
+                # ── draw cross-section edges ──────────────────────────────
+                n = len(unique_pts)
+                if n == 2:
+                    # Simple line segment (tie-line or edge of a simplex)
+                    pl.add_mesh(
+                        pv.Line(unique_pts[0], unique_pts[1]),
+                        color=triangle_color, line_width=4,
+                    )
+                elif n >= 3:
+                    # Closed polygon (tie-triangle cross-section, quadrilateral, …)
+                    for i in range(n):
+                        pl.add_mesh(
+                            pv.Line(unique_pts[i], unique_pts[(i + 1) % n]),
+                            color=triangle_color, line_width=4,
+                        )
+
+                # ── render intersection points as spheres ─────────────────
+                cloud_tri = pv.PolyData(np.array(unique_pts))
+                pl.add_mesh(
+                    cloud_tri,
+                    color=triangle_color,
+                    point_size=triangle_size,
+                    render_points_as_spheres=True,
+                )
+
         img_arr = pl.screenshot(None, transparent_background=False, return_img=True)
         pl.close()
 
@@ -1188,7 +1278,9 @@ class PhaseDiagram5D:
                 pv_keys = ("mode", "shape_alpha", "window_size",
                            "camera_position", "show_wireframe",
                            "show_vertex_labels", "max_points", "min_points",
-                           "markers", "tielines", "marker_color", "marker_size")
+                           "markers", "tielines", "tietriangles",
+                           "marker_color", "marker_size",
+                           "triangle_color", "triangle_size")
                 pv_kw = {k: plot_kwargs[k] for k in pv_keys if k in plot_kwargs}
                 n_slice = self.save_frame_surface(x0, path, **pv_kw)
             else:

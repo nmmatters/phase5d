@@ -980,7 +980,13 @@ class PhaseDiagram5D:
         # ── surfaces ──────────────────────────────────────────────────────
         # Skip surface rendering if the slice is too sparse; render wireframe only.
         if n_total < min_points:
-            pass  # fall through to wireframe + labels below
+            print(
+                f"  Note: x({self.component_labels[0]}) = {x0:.3f} — only {n_total} points "
+                f"in slice (< min_points={min_points}).  Surface rendering skipped; "
+                f"showing wireframe only.\n"
+                f"  An empty tetrahedron does NOT indicate a fully stable phase region — "
+                f"the data density is simply too low for a reliable surface at this composition."
+            )
         elif self.value_type == "phase_stability":
             values_sl = slice_data[:, 5].astype(int)
             for label in (-1, 0):

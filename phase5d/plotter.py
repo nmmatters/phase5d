@@ -122,7 +122,7 @@ _PV_CAM_UP  = np.array([0.0, 0.0,  1.0])
 _PV_LABEL_PUSH = [0.14, 0.10, 0.10, 0.05]   # per-vertex outward push
 
 # Scale bar height appended below each PyVista frame (pixels)
-_PV_SCALE_BAR_PX = 58
+_PV_SCALE_BAR_PX = 76
 
 
 def _add_pv_scale_bar(
@@ -172,8 +172,11 @@ def _add_pv_scale_bar(
     ax_b.set_ylim(0, 1)
     ax_b.axis("off")
 
-    bar_y, bar_h = 0.24, 0.50
-    lbl_y = bar_y - 0.12   # y position for all tick labels (below bar)
+    bar_y = 0.08
+    bar_h = 0.72
+    lbl_y   = bar_y + 0.03            # just above bottom edge; text grows upward
+    tick_bot = bar_y + bar_h * 0.42   # ticks occupy upper ~58 % of bar
+    tick_top = bar_y + bar_h
 
     ax_b.barh(bar_y, 1.0,   left=0.0, height=bar_h,
               color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
@@ -181,14 +184,14 @@ def _add_pv_scale_bar(
         ax_b.barh(bar_y, scale, left=0.0, height=bar_h,
                   color="#4477aa", edgecolor="#888888", linewidth=0.8)
 
-    # Vertical tick lines at 0.1, 0.2, …, 0.9 + endpoint labels
-    ax_b.text(0.0, lbl_y, "0", ha="left",  va="top", fontsize=7)
-    ax_b.text(1.0, lbl_y, "1", ha="right", va="top", fontsize=7)
+    # Vertical tick lines (short, upper portion) + labels at bottom of bar
+    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=7, color="black")
+    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=7, color="black")
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-        tc = "white" if t <= scale + 1e-6 else "#888888"
-        ax_b.plot([t, t], [bar_y, bar_y + bar_h],
-                  color=tc, linewidth=0.9, zorder=3, solid_capstyle="butt")
-        ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="top", fontsize=7)
+        ax_b.plot([t, t], [tick_bot, tick_top],
+                  color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
+        ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="bottom", fontsize=7, color="black")
+
     ax_b.text(
         0.5, 0.97,
         f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
@@ -459,9 +462,11 @@ class PhaseDiagram5D:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        bar_y = 0.28
-        bar_h = 0.46
-        lbl_y = bar_y - 0.08   # y position for all tick labels (below bar)
+        bar_y = 0.08
+        bar_h = 0.72
+        lbl_y = bar_y + 0.03    # just above bottom edge; text grows upward
+        tick_bot = bar_y + bar_h * 0.42   # ticks occupy upper ~58 % of bar
+        tick_top = bar_y + bar_h
 
         # Gray background (full composition range 0 → 1)
         ax.barh(bar_y, 1.0, left=0.0, height=bar_h,
@@ -471,17 +476,14 @@ class PhaseDiagram5D:
             ax.barh(bar_y, scale, left=0.0, height=bar_h,
                     color="#4477aa", edgecolor="#888888", linewidth=0.8)
 
-        # Vertical tick lines at 0.1, 0.2, …, 0.9 + endpoint labels
-        ax.text(0.0, lbl_y, "0", ha="left",   va="top", fontsize=6)
-        ax.text(1.0, lbl_y, "1", ha="right",  va="top", fontsize=6)
+        # Vertical tick lines (short, upper portion) + labels at bottom of bar
+        ax.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=6, color="black")
+        ax.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=6, color="black")
         for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-            # White on blue portion, gray on the empty portion
-            tc = "white" if t <= scale + 1e-6 else "#888888"
-            # solid_capstyle='butt' ensures the line ends flush with the bar edges
-            ax.plot([t, t], [bar_y, bar_y + bar_h],
-                    color=tc, linewidth=0.9, zorder=3, solid_capstyle="butt")
+            ax.plot([t, t], [tick_bot, tick_top],
+                    color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
             ax.text(t, lbl_y, f"{t:.1f}",
-                    ha="center", va="top", fontsize=6)
+                    ha="center", va="bottom", fontsize=6, color="black")
 
         # Header: show scale value so the bar is self-explanatory
         lbl = self.component_labels[0]
@@ -700,7 +702,7 @@ class PhaseDiagram5D:
         wireframe_color: str = "black",
         show_vertex_labels: bool = True,
         elev: float = 20,
-        azim: float = 45,
+        azim: float = -45,
         figsize: Tuple[float, float] = (8, 8),
         title: Optional[str] = None,
         dpi: int = 100,
@@ -833,11 +835,15 @@ class PhaseDiagram5D:
         if show_vertex_labels:
             self._label_vertices(ax3d, mode, x0)
 
-        # Fix axis limits to the FULL tetrahedron so viewport never changes
-        buf = 0.12
-        ax3d.set_xlim(VERTICES[:, 0].min() - buf, VERTICES[:, 0].max() + buf)
-        ax3d.set_ylim(VERTICES[:, 1].min() - buf, VERTICES[:, 1].max() + buf)
-        ax3d.set_zlim(VERTICES[:, 2].min() - buf, VERTICES[:, 2].max() + buf)
+        # Equal-range axis limits so the regular tetrahedron appears undistorted.
+        # All three axes must span the same data range; the 3-D box is a cube.
+        buf  = 0.12
+        mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
+        half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
+        ax3d.set_xlim(mid[0] - half, mid[0] + half)
+        ax3d.set_ylim(mid[1] - half, mid[1] + half)
+        ax3d.set_zlim(mid[2] - half, mid[2] + half)
+        ax3d.set_box_aspect([1, 1, 1])
 
         # x₀ label — top-left text, matching PyVista surface render style
         x0_lbl = self.component_labels[0]
@@ -898,15 +904,12 @@ class PhaseDiagram5D:
             Alpha-shape tightness.  When *None* (default) the value is
             computed adaptively as::
 
-                shape_alpha = 90 × (N / 62196)^(1/3)
+                shape_alpha = 90 × (N_eff / 50000)^(1/3)
 
-            where *N* is the total number of points in the x₀ slice (all
-            points, no subsampling).  62 196 is the reference count at
-            x₀ = 0.30 for a step = 0.01 FeMnNiCoCu grid.  This keeps
-            the circumradius threshold proportional to the local grid
-            spacing so surface quality stays consistent as the slice
-            becomes sparser at higher x₀.  Pass an explicit float to
-            override.
+            where *N_eff* = min(N, max_points) is the actual number of
+            points fed into the Delaunay triangulation after subsampling.
+            This keeps the circumradius threshold matched to the true point
+            density.  Pass an explicit float to override.
         window_size : (width, height)
             Off-screen render resolution in pixels.
         camera_position : list or None
@@ -926,37 +929,6 @@ class PhaseDiagram5D:
             only the tetrahedron wireframe and vertex labels are drawn (no
             phase surfaces).  This prevents artefacts at Fe-rich compositions
             where the composition space becomes very sparse.  Default: 500.
-        markers : list of array-like or None
-            Fixed composition points to highlight as red spheres.  Each entry
-            is a length-5 sequence ``[x0, x1, x2, x3, x4]``.  A sphere is
-            drawn only when the marker's x0 coordinate is within *tolerance*
-            of the current frame's x0.
-
-            Example — nominal alloy composition::
-
-                markers=[[0.20, 0.10, 0.20, 0.20, 0.30]]
-
-        tielines : list of pairs or None
-            Equilibrium tie-lines to visualise.  Each entry is a pair of
-            length-5 endpoints ``[[x0_A, x1_A, …], [x0_B, x1_B, …]]``
-            representing the two equilibrium phases.  The library linearly
-            interpolates along the tie-line to find the intersection with
-            the current x0 plane and draws a sphere there::
-
-                P(t) = A + t*(B - A),   t = (x0 - x0_A) / (x0_B - x0_A)
-
-            A sphere is shown when the tie-line crosses the current frame's
-            x0 plane (within *tolerance* at either end).
-
-            Example — two-phase equilibrium::
-
-                tielines=[[[0.22, 0.21, 0.21, 0.21, 0.15],
-                            [0.00, 0.07, 0.06, 0.01, 0.86]]]
-
-        marker_color : str
-            Color of marker / tieline spheres (default ``'red'``).
-        marker_size : int
-            Point size of the rendered spheres in PyVista units (default 18).
 
         Returns
         -------
@@ -1562,10 +1534,13 @@ class PhaseDiagram5D:
         # ------------------------------------------------------------------ #
         # 6. Axis limits and legend/colorbar                                   #
         # ------------------------------------------------------------------ #
-        buf = 0.12
-        ax3d.set_xlim(VERTICES[:, 0].min() - buf, VERTICES[:, 0].max() + buf)
-        ax3d.set_ylim(VERTICES[:, 1].min() - buf, VERTICES[:, 1].max() + buf)
-        ax3d.set_zlim(VERTICES[:, 2].min() - buf, VERTICES[:, 2].max() + buf)
+        buf  = 0.12
+        mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
+        half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
+        ax3d.set_xlim(mid[0] - half, mid[0] + half)
+        ax3d.set_ylim(mid[1] - half, mid[1] + half)
+        ax3d.set_zlim(mid[2] - half, mid[2] + half)
+        ax3d.set_box_aspect([1, 1, 1])
 
         if show_colorbar and self.value_type == "continuous":
             self._add_colorbar(fig, ax_left=0.88)
@@ -1727,13 +1702,13 @@ class PhaseDiagram5D:
             if show_vertex_labels:
                 self._label_vertices(ax3d, mode, x0)
 
-            buf = 0.12
-            ax3d.set_xlim(VERTICES[:, 0].min() - buf,
-                          VERTICES[:, 0].max() + buf)
-            ax3d.set_ylim(VERTICES[:, 1].min() - buf,
-                          VERTICES[:, 1].max() + buf)
-            ax3d.set_zlim(VERTICES[:, 2].min() - buf,
-                          VERTICES[:, 2].max() + buf)
+            buf  = 0.12
+            mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
+            half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
+            ax3d.set_xlim(mid[0] - half, mid[0] + half)
+            ax3d.set_ylim(mid[1] - half, mid[1] + half)
+            ax3d.set_zlim(mid[2] - half, mid[2] + half)
+            ax3d.set_box_aspect([1, 1, 1])
             ax3d.view_init(elev=e, azim=a)
 
             # Refresh scale bar

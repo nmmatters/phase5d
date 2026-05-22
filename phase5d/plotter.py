@@ -332,9 +332,22 @@ class PhaseDiagram5D:
         self.value_label = value_label
         self.value_unit = value_unit
 
-        # Phase stability colors / alphas
-        self._phase_colors = {**DEFAULT_PHASE_COLORS, **(phase_colors or {})}
-        self._phase_alphas = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
+        # Phase stability colors / alphas.
+        # If the user supplies a complete custom scheme (i.e. their keys don't
+        # overlap with the default -1/0/1 labels at all), use only their dict.
+        # Otherwise fall back to the defaults for any labels not specified.
+        user_colors = phase_colors or {}
+        user_alphas = phase_alphas or {}
+        default_labels = set(DEFAULT_PHASE_COLORS)
+        user_labels    = set(user_colors) | set(user_alphas)
+        if user_labels and user_labels.isdisjoint(default_labels):
+            # Fully custom scheme — no defaults
+            self._phase_colors = dict(user_colors)
+            self._phase_alphas = dict(user_alphas)
+        else:
+            # Classic or mixed scheme — fill in defaults for missing labels
+            self._phase_colors = {**DEFAULT_PHASE_COLORS, **user_colors}
+            self._phase_alphas = {**DEFAULT_PHASE_ALPHAS, **user_alphas}
 
         # Optional stability mask for combined rendering
         if stability_data is not None:
@@ -344,11 +357,8 @@ class PhaseDiagram5D:
                     f"stability_data length ({len(stab)}) must match data "
                     f"length ({len(self.data)})."
                 )
-            if not np.all(np.isin(stab, [-1, 0, 1])):
-                raise ValueError(
-                    "stability_data must contain only -1 (unstable), "
-                    "0 (meta-stable), or 1 (stable)."
-                )
+            # No label restriction — any integers are valid as long as
+            # matching entries exist in phase_colors / phase_alphas.
             self._stability_data: Optional[np.ndarray] = stab
         else:
             self._stability_data = None
@@ -510,16 +520,25 @@ class PhaseDiagram5D:
             cb.set_label(cb_label, fontsize=8, labelpad=6)
 
     def _add_phase_legend(self, fig, bbox_to_anchor=(0.02, 0.02)) -> None:
-        labels = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
+        # Names for the classic -1/0/1 scheme only; custom schemes use "Phase N"
+        classic_names = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
+        is_classic = set(self._phase_colors.keys()) <= {-1, 0, 1}
+        # Only show labels that actually appear in the dataset
+        data_labels = set(np.unique(self.data[:, 5].astype(int)))
         handles = []
-        for label in (-1, 0, 1):
+        for label in sorted(self._phase_colors):
+            if label not in self._phase_alphas or label not in data_labels:
+                continue
+            alpha = self._phase_alphas[label]
+            if alpha < 1e-3:
+                continue   # fully transparent — nothing to show
             r, g, b = self._phase_colors[label]
-            a = max(self._phase_alphas[label], 0.25)  # show even if transparent
+            name = classic_names.get(label, f"Phase {label}") if is_classic else f"Phase {label}"
             patch = mpatches.Patch(
-                facecolor=(r, g, b, a),
+                facecolor=(r, g, b, alpha),
                 edgecolor="gray",
                 linewidth=0.5,
-                label=labels[label],
+                label=name,
             )
             handles.append(patch)
         fig.legend(
@@ -655,8 +674,7 @@ class PhaseDiagram5D:
             ax3d.add_collection3d(poly)
 
         if self.value_type == "phase_stability":
-            for label in (-1, 0):          # label 1 = stable = invisible
-                a = self._phase_alphas[label]
+            for label, a in self._phase_alphas.items():
                 if a < 1e-3:
                     continue
                 mask = values.astype(int) == label
@@ -666,8 +684,7 @@ class PhaseDiagram5D:
 
         elif stability is not None:
             # Combined mode: group by stability, colormap hue from values
-            for label in (-1, 0):
-                a = self._phase_alphas[label]
+            for label, a in self._phase_alphas.items():
                 if a < 1e-3:
                     continue
                 mask = stability == label
@@ -991,8 +1008,7 @@ class PhaseDiagram5D:
             )
         elif self.value_type == "phase_stability":
             values_sl = slice_data[:, 5].astype(int)
-            for label in (-1, 0):
-                face_op = self._phase_alphas.get(label, 0.0)
+            for label, face_op in self._phase_alphas.items():
                 if face_op < 1e-3:
                     continue
                 mask = values_sl == label
@@ -1076,17 +1092,31 @@ class PhaseDiagram5D:
 
         # ── legend ────────────────────────────────────────────────────────
         if self.value_type == "phase_stability":
-            pl.add_legend(
-                labels=[
-                    ("Unstable",    self._phase_colors.get(-1, (0.25, 0.25, 0.25))),
-                    ("Meta-stable", self._phase_colors.get( 0, (0.75, 0.75, 0.75))),
-                    ("Stable",      (1.0, 1.0, 1.0)),
-                ],
-                bcolor=(0.80, 0.80, 0.80),
-                border=True,
-                size=(0.24, 0.13),
-                loc="lower left",
-            )
+            classic_names = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
+            is_classic    = set(self._phase_colors.keys()) <= {-1, 0, 1}
+            # Only include labels that appear in the data and are visible
+            data_labels = set(np.unique(slice_data[:, 5].astype(int)))
+            if not data_labels:
+                data_labels = set(np.unique(self.data[:, 5].astype(int)))
+            legend_entries = []
+            for label in sorted(self._phase_colors):
+                if label not in data_labels:
+                    continue
+                if self._phase_alphas.get(label, 0.0) < 1e-3:
+                    continue   # fully transparent — skip
+                name  = (classic_names.get(label, f"Phase {label}")
+                         if is_classic else f"Phase {label}")
+                color = self._phase_colors[label]
+                legend_entries.append((name, color))
+            if legend_entries:
+                n_entries = len(legend_entries)
+                pl.add_legend(
+                    labels=legend_entries,
+                    bcolor=(0.80, 0.80, 0.80),
+                    border=True,
+                    size=(0.24, max(0.06, 0.05 * n_entries)),
+                    loc="lower left",
+                )
 
         # ── markers & tielines ────────────────────────────────────────────
         # Collect all 3-D points to render as coloured spheres this frame.

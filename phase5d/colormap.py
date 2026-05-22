@@ -3,7 +3,11 @@ Color mapping for 5D phase diagram visualization.
 
 Two modes are supported:
   - 'continuous' : scalar property (Gibbs energy, enthalpy, …) → colormap RGBA
-  - 'phase_stability' : integer labels (-1 / 0 / 1) → fixed gray RGBA
+  - 'phase_stability' : integer labels → fixed RGBA per label
+
+The default color/alpha scheme uses labels -1 / 0 / 1 (unstable / meta-stable
+/ stable), but any integer labels are accepted as long as matching entries are
+provided in the phase_colors and phase_alphas dicts passed at construction time.
 """
 
 import numpy as np
@@ -12,7 +16,7 @@ import matplotlib.colors as mcolors
 import matplotlib.cm as mcm
 from typing import Dict, Optional, Tuple
 
-# Default colors and alphas for phase stability rendering
+# Default colors and alphas for the classic phase-stability scheme (-1 / 0 / 1)
 DEFAULT_PHASE_COLORS: Dict[int, Tuple[float, float, float]] = {
     -1: (0.20, 0.20, 0.20),  # dark gray  – unstable
      0: (0.70, 0.70, 0.70),  # light gray – meta-stable
@@ -67,14 +71,21 @@ def phase_stability_colors(
     phase_alphas: Optional[Dict[int, float]] = None,
 ) -> np.ndarray:
     """
-    Map phase stability labels (-1 / 0 / 1) to RGBA colors.
+    Map integer phase labels to RGBA colors.
+
+    Works with any integer label scheme.  The classic stability scheme uses
+    -1 / 0 / 1 (unstable / meta-stable / stable); phase-number data uses
+    1 / 2 / 3 / … — pass matching phase_colors / phase_alphas dicts for
+    any label set.
 
     Parameters
     ----------
     values : array-like, shape (N,)
-        Integer labels: -1 (unstable), 0 (meta-stable), 1 (stable).
+        Integer labels.
     phase_colors : dict mapping label → (R, G, B) in [0, 1]
+        Overrides DEFAULT_PHASE_COLORS for listed labels.
     phase_alphas : dict mapping label → alpha in [0, 1]
+        Overrides DEFAULT_PHASE_ALPHAS for listed labels.
 
     Returns
     -------
@@ -85,11 +96,11 @@ def phase_stability_colors(
     alphas_map = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
 
     rgba = np.zeros((len(values), 4), dtype=float)
-    for label in (-1, 0, 1):
+    for label in np.unique(values):
         mask = values == label
-        if mask.any():
+        if label in colors_map:
             r, g, b = colors_map[label]
-            a = alphas_map[label]
+            a = alphas_map.get(label, 0.5)
             rgba[mask] = [r, g, b, a]
     return rgba
 
@@ -103,7 +114,7 @@ def combined_colors(
     phase_alphas: Optional[Dict[int, float]] = None,
 ) -> Tuple[np.ndarray, mcolors.Normalize, object]:
     """
-    Map scalar values to colors while using phase stability labels to set alpha.
+    Map scalar values to colors while using phase labels to set alpha.
 
     This is the "combined" rendering mode: the *hue* encodes a continuous
     property (e.g. Gibbs energy) and the *opacity* encodes phase stability —
@@ -116,11 +127,11 @@ def combined_colors(
     continuous_values : array-like, shape (N,)
         Scalar property (Gm, Hmr, …) used to pick colors from the colormap.
     phase_labels : array-like, shape (N,)
-        Stability labels: -1 (unstable), 0 (meta-stable), 1 (stable).
+        Integer labels used to set per-point alpha.
     cmap : matplotlib colormap name
     vmin, vmax : color-scale limits (defaults to data min/max).
     phase_alphas : dict or None
-        Override default alpha per stability label.
+        Alpha per label.  Defaults to DEFAULT_PHASE_ALPHAS.
 
     Returns
     -------
@@ -134,11 +145,11 @@ def combined_colors(
     # Get hue from continuous colormap (alpha ignored here — set below)
     rgba, norm, cm = continuous_colors(continuous_values, cmap, vmin, vmax, alpha=1.0)
 
-    # Override alpha from stability labels
+    # Override alpha from phase labels
     alphas_map = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
-    for label in (-1, 0, 1):
+    for label in np.unique(phase_labels):
         mask = phase_labels == label
-        rgba[mask, 3] = alphas_map[label]
+        rgba[mask, 3] = alphas_map.get(label, 0.5)
 
     return rgba, norm, cm
 

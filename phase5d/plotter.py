@@ -1107,6 +1107,11 @@ class PhaseDiagram5D:
                 legend_entries.append((name, color))
             if legend_entries:
                 n_entries = len(legend_entries)
+                # PyVista's add_legend has no font_size parameter, but it reads
+                # from the global theme — temporarily lower it so text fits
+                # inside the box, then restore the original value.
+                _orig_font = pv.global_theme.font.size
+                pv.global_theme.font.size = 11
                 pl.add_legend(
                     labels=legend_entries,
                     bcolor=(0.80, 0.80, 0.80),
@@ -1114,6 +1119,7 @@ class PhaseDiagram5D:
                     size=(0.26, max(0.12, 0.09 * n_entries)),
                     loc="lower left",
                 )
+                pv.global_theme.font.size = _orig_font
 
         # ── markers & tielines ────────────────────────────────────────────
         # Collect all 3-D points to render as coloured spheres this frame.

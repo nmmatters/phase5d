@@ -130,6 +130,7 @@ def _add_pv_scale_bar(
     out_path: str,
     x0: float,
     x0_label: str,
+    legend_entries=None,
 ) -> None:
     """
     Composite a PyVista screenshot with a scale bar strip and save.
@@ -138,6 +139,10 @@ def _add_pv_scale_bar(
     matplotlib so the visual language (colour, font) matches the scatter
     renderer.  The filled (blue) portion = 1 − x0 indicates what fraction
     of the full quaternary composition space is currently displayed.
+
+    An optional phase legend is drawn in the lower-left corner of the PyVista
+    image area using matplotlib patches — this gives full font-size control
+    that PyVista's own add_legend does not expose.
 
     Parameters
     ----------
@@ -149,7 +154,10 @@ def _add_pv_scale_bar(
         Current x₀ value.
     x0_label : str
         Name of the x₀ component (e.g. ``'Fe'``).
+    legend_entries : list of (str, (R, G, B)) or None
+        Phase legend entries to draw as coloured patches.
     """
+    import matplotlib.patches as _mpatches
     from matplotlib.backends.backend_agg import FigureCanvasAgg
 
     h, w   = img_arr.shape[:2]
@@ -164,6 +172,65 @@ def _add_pv_scale_bar(
     ax_img = fig.add_axes([0.0, bar_px / total, 1.0, h / total])
     ax_img.imshow(img_arr)
     ax_img.set_axis_off()
+
+    # ── matplotlib legend overlay (lower-left of the image area) ─────────
+    if legend_entries:
+        fs   = 9          # font size — freely adjustable here
+        pad  = 6          # pixels of padding inside the box
+        lh   = fs + 5     # row height in pixels
+        sw   = fs + 2     # colour swatch width in pixels
+        gap  = 4          # gap between swatch and text
+
+        # Measure the widest label in pixel-space so the box auto-sizes
+        from matplotlib.font_manager import FontProperties
+        fp = FontProperties(size=fs)
+
+        n    = len(legend_entries)
+        box_h_px = n * lh + 2 * pad
+        # Estimate text width: ~0.6 × font_size per character is a safe upper bound
+        max_chars = max(len(name) for name, _ in legend_entries)
+        box_w_px  = sw + gap + int(max_chars * fs * 0.62) + 2 * pad
+
+        # Convert pixel dimensions to figure-fraction coordinates
+        fig_w_px = w
+        fig_h_px = total
+        # The image occupies the top h/total of the figure; position box at
+        # lower-left of the image area with a small margin.
+        margin_px = 10
+        x0_fig = margin_px / fig_w_px
+        y0_fig = (bar_px + margin_px) / fig_h_px
+        bw_fig = box_w_px / fig_w_px
+        bh_fig = box_h_px / fig_h_px
+
+        ax_leg = fig.add_axes([x0_fig, y0_fig, bw_fig, bh_fig])
+        ax_leg.set_xlim(0, box_w_px)
+        ax_leg.set_ylim(0, box_h_px)
+        ax_leg.axis("off")
+
+        # Gray background box
+        ax_leg.add_patch(_mpatches.FancyBboxPatch(
+            (0, 0), box_w_px, box_h_px,
+            boxstyle="square,pad=0",
+            facecolor="#cccccc", edgecolor="#888888", linewidth=0.8,
+            transform=ax_leg.transData, zorder=1,
+        ))
+
+        for i, (name, color) in enumerate(legend_entries):
+            row_y = box_h_px - pad - (i + 1) * lh + (lh - sw) / 2
+            # Colour swatch
+            ax_leg.add_patch(_mpatches.Rectangle(
+                (pad, row_y), sw, sw,
+                facecolor=color, edgecolor="#555555", linewidth=0.5,
+                transform=ax_leg.transData, zorder=2,
+            ))
+            # Label
+            ax_leg.text(
+                pad + sw + gap, row_y + sw / 2,
+                name,
+                va="center", ha="left",
+                fontsize=fs, color="black",
+                transform=ax_leg.transData, zorder=2,
+            )
 
     # ── scale bar strip (bottom) ──────────────────────────────────────────
     ax_b = fig.add_axes([0.04, 0.002, 0.92, (bar_px / total) * 0.88])
@@ -1094,6 +1161,9 @@ class PhaseDiagram5D:
         # Use the *full* dataset to decide which labels belong in the legend
         # so that rare phases (e.g. 4-phase regions with only ~30 total points)
         # are not omitted when they happen to be absent from the current slice.
+        # Entries are rendered via matplotlib in _add_pv_scale_bar so we have
+        # full font-size control (PyVista's add_legend has no font_size param).
+        legend_entries = []
         if self.value_type == "phase_stability":
             data_labels = set(np.unique(self.data[:, 5].astype(int)))
             legend_entries = []
@@ -1105,21 +1175,8 @@ class PhaseDiagram5D:
                 name  = (self._phase_names or {}).get(label, str(label))
                 color = self._phase_colors[label]
                 legend_entries.append((name, color))
-            if legend_entries:
-                n_entries = len(legend_entries)
-                # PyVista's add_legend has no font_size parameter, but it reads
-                # from the global theme — temporarily lower it so text fits
-                # inside the box, then restore the original value.
-                _orig_font = pv.global_theme.font.size
-                pv.global_theme.font.size = 11
-                pl.add_legend(
-                    labels=legend_entries,
-                    bcolor=(0.80, 0.80, 0.80),
-                    border=True,
-                    size=(0.26, max(0.12, 0.09 * n_entries)),
-                    loc="lower left",
-                )
-                pv.global_theme.font.size = _orig_font
+            # legend_entries collected above; rendered via matplotlib below
+            # (PyVista's add_legend exposes no font_size control)
 
         # ── markers & tielines ────────────────────────────────────────────
         # Collect all 3-D points to render as coloured spheres this frame.
@@ -1256,8 +1313,10 @@ class PhaseDiagram5D:
         img_arr = pl.screenshot(None, transparent_background=False, return_img=True)
         pl.close()
 
-        # Composite PyVista render with matplotlib scale bar strip
-        _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0])
+        # Composite PyVista render with matplotlib scale bar + legend
+        _mpl_legend = legend_entries if self.value_type == "phase_stability" else None
+        _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0],
+                          legend_entries=_mpl_legend)
         return n_total
 
     def save_frames(

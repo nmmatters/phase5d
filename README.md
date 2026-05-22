@@ -314,13 +314,7 @@ pd5 = PhaseDiagram5D(
         5: (0.85, 0.55, 0.05),             # amber       – five-phase
     },
     phase_alphas={1: 0.00, 2: 0.55, 3: 0.55, 4: 0.55, 5: 0.55},
-    phase_names={
-        1: "Single-phase",
-        2: "Two-phase",
-        3: "Three-phase",
-        4: "Four-phase",
-        5: "Five-phase",
-    },
+    phase_names={1: "1-phase", 2: "2-phase", 3: "3-phase", 4: "4-phase", 5: "5-phase"},
     component_labels=['Fe', 'Mn', 'Ni', 'Co', 'Cu'],
 )
 ```

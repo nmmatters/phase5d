@@ -287,8 +287,8 @@ class PhaseDiagram5D:
 
         Phase-number scheme::
 
-            phase_names={1: "Single-phase", 2: "Two-phase", 3: "Three-phase",
-                         4: "Four-phase",   5: "Five-phase"}
+            phase_names={1: "1-phase", 2: "2-phase", 3: "3-phase",
+                         4: "4-phase", 5: "5-phase"}
 
     value_label : str
         Name of the quantity shown in the colorbar, e.g. ``'Gm'`` or
@@ -1091,10 +1091,11 @@ class PhaseDiagram5D:
         )
 
         # ── legend ────────────────────────────────────────────────────────
+        # Use the *full* dataset to decide which labels belong in the legend
+        # so that rare phases (e.g. 4-phase regions with only ~30 total points)
+        # are not omitted when they happen to be absent from the current slice.
         if self.value_type == "phase_stability":
-            data_labels = set(np.unique(slice_data[:, 5].astype(int)))
-            if not data_labels:
-                data_labels = set(np.unique(self.data[:, 5].astype(int)))
+            data_labels = set(np.unique(self.data[:, 5].astype(int)))
             legend_entries = []
             for label in sorted(self._phase_colors):
                 if label not in data_labels:
@@ -1110,7 +1111,7 @@ class PhaseDiagram5D:
                     labels=legend_entries,
                     bcolor=(0.80, 0.80, 0.80),
                     border=True,
-                    size=(0.24, max(0.06, 0.05 * n_entries)),
+                    size=(0.26, max(0.12, 0.09 * n_entries)),
                     loc="lower left",
                 )
 

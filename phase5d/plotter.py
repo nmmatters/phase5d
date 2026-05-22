@@ -175,21 +175,18 @@ def _add_pv_scale_bar(
 
     # ── matplotlib legend overlay (lower-left of the image area) ─────────
     if legend_entries:
-        fs   = 9          # font size — freely adjustable here
+        fs   = 10         # font size — freely adjustable here
         pad  = 6          # pixels of padding inside the box
-        lh   = fs + 5     # row height in pixels
+        lh   = fs + 6     # row height in pixels
         sw   = fs + 2     # colour swatch width in pixels
-        gap  = 4          # gap between swatch and text
-
-        # Measure the widest label in pixel-space so the box auto-sizes
-        from matplotlib.font_manager import FontProperties
-        fp = FontProperties(size=fs)
+        gap  = 5          # gap between swatch and text
 
         n    = len(legend_entries)
         box_h_px = n * lh + 2 * pad
-        # Estimate text width: ~0.6 × font_size per character is a safe upper bound
+        # 0.72 px per character per pt is a conservative upper bound for
+        # typical sans-serif fonts at 100 dpi — keeps all labels inside the box
         max_chars = max(len(name) for name, _ in legend_entries)
-        box_w_px  = sw + gap + int(max_chars * fs * 0.62) + 2 * pad
+        box_w_px  = sw + gap + int(max_chars * fs * 0.72) + 2 * pad
 
         # Convert pixel dimensions to figure-fraction coordinates
         fig_w_px = w
@@ -1166,12 +1163,12 @@ class PhaseDiagram5D:
         legend_entries = []
         if self.value_type == "phase_stability":
             data_labels = set(np.unique(self.data[:, 5].astype(int)))
-            legend_entries = []
             for label in sorted(self._phase_colors):
                 if label not in data_labels:
                     continue
-                if self._phase_alphas.get(label, 0.0) < 1e-3:
-                    continue   # fully transparent — skip
+                # Include all labeled phases regardless of alpha — a transparent
+                # phase (e.g. 1-phase) still deserves a legend entry to show
+                # the user what the invisible region represents.
                 name  = (self._phase_names or {}).get(label, str(label))
                 color = self._phase_colors[label]
                 legend_entries.append((name, color))

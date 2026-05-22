@@ -104,6 +104,7 @@ def _alpha_boundary_faces(pts: np.ndarray, shape_alpha: float):
     return boundary  # (M, 3) int
 
 
+# Adaptive alpha calibration constants
 # Adaptive alpha calibration constants.
 # PyVista backend: calibrated at max_points=50 000 (the actual N fed into
 # Delaunay when a slice has >50 000 points).  For sparse slices (N < 50 000)
@@ -269,12 +270,25 @@ class PhaseDiagram5D:
             )
 
     phase_colors : dict or None
-        Override default RGB colors for stability labels.
-        Keys: -1, 0, 1 → (R, G, B) tuples in [0, 1].
+        RGB color per label, e.g. ``{-1: (0.2, 0.2, 0.2), 0: (0.7, 0.7, 0.7), 1: (1, 1, 1)}``.
+        Defaults to dark-gray / light-gray / white for the classic -1/0/1 scheme.
 
     phase_alphas : dict or None
-        Override default alpha values for stability labels.
-        Keys: -1, 0, 1 → float in [0, 1].
+        Opacity per label, e.g. ``{-1: 1.0, 0: 0.5, 1: 0.0}``.
+        Defaults to opaque / semi-transparent / invisible for the classic scheme.
+
+    phase_names : dict or None
+        Human-readable name per label shown in the legend.
+        If ``None`` the label integer itself is used (e.g. ``"2"``).
+
+        Classic stability scheme::
+
+            phase_names={-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
+
+        Phase-number scheme::
+
+            phase_names={1: "Single-phase", 2: "Two-phase", 3: "Three-phase",
+                         4: "Four-phase",   5: "Five-phase"}
 
     value_label : str
         Name of the quantity shown in the colorbar, e.g. ``'Gm'`` or
@@ -309,6 +323,7 @@ class PhaseDiagram5D:
         stability_data=None,
         phase_colors: Optional[Dict[int, Tuple[float, float, float]]] = None,
         phase_alphas: Optional[Dict[int, float]] = None,
+        phase_names: Optional[Dict[int, str]] = None,
         value_label: str = "",
         value_unit: str = "",
     ):
@@ -332,22 +347,11 @@ class PhaseDiagram5D:
         self.value_label = value_label
         self.value_unit = value_unit
 
-        # Phase stability colors / alphas.
-        # If the user supplies a complete custom scheme (i.e. their keys don't
-        # overlap with the default -1/0/1 labels at all), use only their dict.
-        # Otherwise fall back to the defaults for any labels not specified.
-        user_colors = phase_colors or {}
-        user_alphas = phase_alphas or {}
-        default_labels = set(DEFAULT_PHASE_COLORS)
-        user_labels    = set(user_colors) | set(user_alphas)
-        if user_labels and user_labels.isdisjoint(default_labels):
-            # Fully custom scheme — no defaults
-            self._phase_colors = dict(user_colors)
-            self._phase_alphas = dict(user_alphas)
-        else:
-            # Classic or mixed scheme — fill in defaults for missing labels
-            self._phase_colors = {**DEFAULT_PHASE_COLORS, **user_colors}
-            self._phase_alphas = {**DEFAULT_PHASE_ALPHAS, **user_alphas}
+        # Phase stability colors / alphas / names.
+        # User dicts override defaults; defaults only fill labels not specified.
+        self._phase_colors = {**DEFAULT_PHASE_COLORS, **(phase_colors or {})}
+        self._phase_alphas = {**DEFAULT_PHASE_ALPHAS, **(phase_alphas or {})}
+        self._phase_names: Optional[Dict[int, str]] = phase_names
 
         # Optional stability mask for combined rendering
         if stability_data is not None:
@@ -520,10 +524,6 @@ class PhaseDiagram5D:
             cb.set_label(cb_label, fontsize=8, labelpad=6)
 
     def _add_phase_legend(self, fig, bbox_to_anchor=(0.02, 0.02)) -> None:
-        # Names for the classic -1/0/1 scheme only; custom schemes use "Phase N"
-        classic_names = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
-        is_classic = set(self._phase_colors.keys()) <= {-1, 0, 1}
-        # Only show labels that actually appear in the dataset
         data_labels = set(np.unique(self.data[:, 5].astype(int)))
         handles = []
         for label in sorted(self._phase_colors):
@@ -531,9 +531,9 @@ class PhaseDiagram5D:
                 continue
             alpha = self._phase_alphas[label]
             if alpha < 1e-3:
-                continue   # fully transparent — nothing to show
+                continue   # fully transparent — skip
             r, g, b = self._phase_colors[label]
-            name = classic_names.get(label, f"Phase {label}") if is_classic else f"Phase {label}"
+            name = (self._phase_names or {}).get(label, str(label))
             patch = mpatches.Patch(
                 facecolor=(r, g, b, alpha),
                 edgecolor="gray",
@@ -1092,9 +1092,6 @@ class PhaseDiagram5D:
 
         # ── legend ────────────────────────────────────────────────────────
         if self.value_type == "phase_stability":
-            classic_names = {-1: "Unstable", 0: "Meta-stable", 1: "Stable"}
-            is_classic    = set(self._phase_colors.keys()) <= {-1, 0, 1}
-            # Only include labels that appear in the data and are visible
             data_labels = set(np.unique(slice_data[:, 5].astype(int)))
             if not data_labels:
                 data_labels = set(np.unique(self.data[:, 5].astype(int)))
@@ -1104,8 +1101,7 @@ class PhaseDiagram5D:
                     continue
                 if self._phase_alphas.get(label, 0.0) < 1e-3:
                     continue   # fully transparent — skip
-                name  = (classic_names.get(label, f"Phase {label}")
-                         if is_classic else f"Phase {label}")
+                name  = (self._phase_names or {}).get(label, str(label))
                 color = self._phase_colors[label]
                 legend_entries.append((name, color))
             if legend_entries:

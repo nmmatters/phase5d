@@ -288,11 +288,46 @@ pd5 = PhaseDiagram5D(
     phase_alphas={-1: 1.0,               # opaque
                    0: 0.5,               # semi-transparent
                    1: 0.0},              # invisible (fully transparent)
+    phase_names={-1: "Unstable", 0: "Meta-stable", 1: "Stable"},
 )
 ```
 
 Stable regions are invisible by default; set `phase_alphas={1: 0.15}` to
 show them faintly.
+
+### Phase-number labels (1–5)
+
+Any integer label scheme is supported — pass matching `phase_colors`, `phase_alphas`,
+and `phase_names` dicts.  A typical use case is a **phase-count** dataset where the
+value column holds the number of co-existing equilibrium phases (1 = single-phase,
+2 = two-phase, …):
+
+```python
+pd5 = PhaseDiagram5D(
+    data,                                   # value column holds 1–5
+    value_type='phase_stability',
+    phase_colors={
+        1: (1.00, 1.00, 1.00),             # white       – single-phase
+        2: (0.20, 0.40, 0.80),             # blue        – two-phase
+        3: (0.80, 0.20, 0.20),             # red         – three-phase
+        4: (0.15, 0.65, 0.25),             # green       – four-phase
+        5: (0.85, 0.55, 0.05),             # amber       – five-phase
+    },
+    phase_alphas={1: 0.00, 2: 0.55, 3: 0.55, 4: 0.55, 5: 0.55},
+    phase_names={
+        1: "Single-phase",
+        2: "Two-phase",
+        3: "Three-phase",
+        4: "Four-phase",
+        5: "Five-phase",
+    },
+    component_labels=['Fe', 'Mn', 'Ni', 'Co', 'Cu'],
+)
+```
+
+The legend automatically shows only labels that are **both present in the data
+and not fully transparent** (`alpha ≥ 0.001`).  `phase_names` controls what text
+appears in the legend; if omitted the raw integer is shown instead.
 
 ---
 
@@ -312,6 +347,7 @@ PhaseDiagram5D(
     component_labels = ['x₀','x₁','x₂','x₃','x₄'],
     phase_colors     = None,                  # dict {label: (R,G,B)}
     phase_alphas     = None,                  # dict {label: alpha}
+    phase_names      = None,                  # dict {label: str} — legend text per label
     value_label      = '',                    # colorbar label, e.g. 'Gm'
     value_unit       = '',                    # colorbar unit,  e.g. 'J/mol'
 )

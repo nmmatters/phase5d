@@ -917,7 +917,7 @@ class PhaseDiagram5D:
 
         # Equal-range axis limits so the regular tetrahedron appears undistorted.
         # All three axes must span the same data range; the 3-D box is a cube.
-        buf  = 0.12
+        buf  = 0.04
         mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
         half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
         ax3d.set_xlim(mid[0] - half, mid[0] + half)
@@ -1146,6 +1146,7 @@ class PhaseDiagram5D:
         # ── camera ────────────────────────────────────────────────────────
         cam = camera_position or [_PV_CAM_POS, _PV_FOCAL, _PV_CAM_UP]
         pl.camera_position = cam
+        pl.camera.zoom(1.4)
 
         # ── title ─────────────────────────────────────────────────────────
         x0_label = self.component_labels[0]
@@ -1888,7 +1889,7 @@ class PhaseDiagram5D:
             if show_vertex_labels:
                 self._label_vertices(ax3d, mode, x0)
 
-            buf  = 0.12
+            buf  = 0.04
             mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
             half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
             ax3d.set_xlim(mid[0] - half, mid[0] + half)

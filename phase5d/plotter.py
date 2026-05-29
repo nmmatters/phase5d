@@ -124,6 +124,17 @@ _PV_LABEL_PUSH = [0.14, 0.10, 0.10, 0.05]   # per-vertex outward push
 # Scale bar height appended below each PyVista frame (pixels)
 _PV_SCALE_BAR_PX = 76
 
+# Scale bar visual constants — shared by both the matplotlib (_draw_scale_bar)
+# and PyVista-composite (_add_pv_scale_bar) renderers so the two always match.
+_SB_BAR_Y       = 0.08          # bottom edge of the bar (axes fraction)
+_SB_BAR_H       = 0.72          # bar height (axes fraction)
+_SB_TICK_FRAC   = 0.42          # ticks start this far up the bar
+_SB_COLOR_BG    = "#e0e0e0"     # unfilled portion
+_SB_COLOR_FILL  = "#4477aa"     # filled (active) portion
+_SB_COLOR_EDGE  = "#888888"
+_SB_FS_TICK     = 7             # tick-label font size
+_SB_FS_HEADER   = 8             # header text font size
+
 
 def _add_pv_scale_bar(
     img_arr: np.ndarray,
@@ -236,30 +247,29 @@ def _add_pv_scale_bar(
     ax_b.set_ylim(0, 1)
     ax_b.axis("off")
 
-    bar_y = 0.08
-    bar_h = 0.72
-    lbl_y   = bar_y + 0.03            # just above bottom edge; text grows upward
-    tick_bot = bar_y + bar_h * 0.42   # ticks occupy upper ~58 % of bar
-    tick_top = bar_y + bar_h
+    lbl_y    = _SB_BAR_Y + 0.03
+    tick_bot = _SB_BAR_Y + _SB_BAR_H * _SB_TICK_FRAC
+    tick_top = _SB_BAR_Y + _SB_BAR_H
 
-    ax_b.barh(bar_y, 1.0,   left=0.0, height=bar_h,
-              color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
+    ax_b.barh(_SB_BAR_Y, 1.0,   left=0.0, height=_SB_BAR_H,
+              color=_SB_COLOR_BG, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
     if scale > 0:
-        ax_b.barh(bar_y, scale, left=0.0, height=bar_h,
-                  color="#4477aa", edgecolor="#888888", linewidth=0.8)
+        ax_b.barh(_SB_BAR_Y, scale, left=0.0, height=_SB_BAR_H,
+                  color=_SB_COLOR_FILL, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
 
     # Vertical tick lines (short, upper portion) + labels at bottom of bar
-    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=7, color="black")
-    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=7, color="black")
+    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=_SB_FS_TICK, color="black")
+    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=_SB_FS_TICK, color="black")
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         ax_b.plot([t, t], [tick_bot, tick_top],
                   color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
-        ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="bottom", fontsize=7, color="black")
+        ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="bottom",
+                  fontsize=_SB_FS_TICK, color="black")
 
     ax_b.text(
         0.5, 0.97,
         f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
-        ha="center", va="top", fontsize=8, transform=ax_b.transAxes,
+        ha="center", va="top", fontsize=_SB_FS_HEADER, transform=ax_b.transAxes,
     )
 
     # ── save without bbox_inches so pixel size is deterministic ──────────
@@ -267,6 +277,18 @@ def _add_pv_scale_bar(
     canvas.draw()
     fig.savefig(out_path, dpi=dpi, facecolor="white")
     plt.close(fig)
+
+
+def _subsample_idx(n: int, max_points: int, seed: int = 42) -> np.ndarray:
+    """Return a random index array for subsampling *n* rows to *max_points*.
+
+    Centralises the random seed so all callers behave consistently and the
+    seed is easy to change in one place.  Returns ``np.arange(n)`` unchanged
+    when ``n <= max_points``.
+    """
+    if n <= max_points:
+        return np.arange(n)
+    return np.random.default_rng(seed).choice(n, size=max_points, replace=False)
 
 
 class PhaseDiagram5D:
@@ -539,35 +561,33 @@ class PhaseDiagram5D:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        bar_y = 0.08
-        bar_h = 0.72
-        lbl_y = bar_y + 0.03    # just above bottom edge; text grows upward
-        tick_bot = bar_y + bar_h * 0.42   # ticks occupy upper ~58 % of bar
-        tick_top = bar_y + bar_h
+        lbl_y    = _SB_BAR_Y + 0.03
+        tick_bot = _SB_BAR_Y + _SB_BAR_H * _SB_TICK_FRAC
+        tick_top = _SB_BAR_Y + _SB_BAR_H
 
         # Gray background (full composition range 0 → 1)
-        ax.barh(bar_y, 1.0, left=0.0, height=bar_h,
-                color="#e0e0e0", edgecolor="#888888", linewidth=0.8)
+        ax.barh(_SB_BAR_Y, 1.0, left=0.0, height=_SB_BAR_H,
+                color=_SB_COLOR_BG, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
         # Blue filled portion (active scale = 1 − x0)
         if scale > 0:
-            ax.barh(bar_y, scale, left=0.0, height=bar_h,
-                    color="#4477aa", edgecolor="#888888", linewidth=0.8)
+            ax.barh(_SB_BAR_Y, scale, left=0.0, height=_SB_BAR_H,
+                    color=_SB_COLOR_FILL, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
 
         # Vertical tick lines (short, upper portion) + labels at bottom of bar
-        ax.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=6, color="black")
-        ax.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=6, color="black")
+        ax.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=_SB_FS_TICK, color="black")
+        ax.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=_SB_FS_TICK, color="black")
         for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
             ax.plot([t, t], [tick_bot, tick_top],
                     color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
             ax.text(t, lbl_y, f"{t:.1f}",
-                    ha="center", va="bottom", fontsize=6, color="black")
+                    ha="center", va="bottom", fontsize=_SB_FS_TICK, color="black")
 
         # Header: show scale value so the bar is self-explanatory
         lbl = self.component_labels[0]
         ax.text(
             0.5, 0.97,
             f"composition scale  (1 − x({lbl}) = {scale:.3f})",
-            ha="center", va="top", fontsize=8,
+            ha="center", va="top", fontsize=_SB_FS_HEADER,
             transform=ax.transAxes,
         )
 
@@ -891,8 +911,7 @@ class PhaseDiagram5D:
 
             # Downsample — apply the same random indices to both arrays
             if len(slice_data) > max_points:
-                rng = np.random.default_rng(42)
-                idx = rng.choice(len(slice_data), size=max_points, replace=False)
+                idx = _subsample_idx(len(slice_data), max_points)
                 slice_data = slice_data[idx]
                 if stab_slice is not None:
                     stab_slice = stab_slice[idx]
@@ -956,8 +975,11 @@ class PhaseDiagram5D:
         shape_alpha: Optional[float] = None,
         window_size: Tuple[int, int] = (1400, 1000),
         camera_position=None,
+        camera_zoom: float = 1.4,
         show_wireframe: bool = True,
         show_vertex_labels: bool = True,
+        label_fontsize: int = 18,
+        title_fontsize: int = 14,
         max_points: int = 50000,
         min_points: int = 1000,
         markers=None,
@@ -998,10 +1020,17 @@ class PhaseDiagram5D:
         camera_position : list or None
             PyVista camera position triple ``[position, focal_point, up]``.
             Defaults to a front-right elevated view of the tetrahedron.
+        camera_zoom : float
+            Zoom factor applied after the camera position is set (default 1.4).
+            Increase to fill more of the frame; decrease to see more context.
         show_wireframe : bool
             Draw the tetrahedron edges.
         show_vertex_labels : bool
             Label each vertex with its component name.
+        label_fontsize : int
+            Font size for vertex labels (default 18).
+        title_fontsize : int
+            Font size for the x₀ title in the upper-left corner (default 14).
         max_points : int
             Maximum points per phase class for the continuous rendering path.
             Has no effect on phase_stability mode (all points are used for
@@ -1098,8 +1127,7 @@ class PhaseDiagram5D:
         elif n_total >= min_points:
             # Continuous or combined mode: one surface for all visible points
             if len(slice_data) > max_points:
-                rng = np.random.default_rng(42)
-                idx = rng.choice(len(slice_data), max_points, replace=False)
+                idx = _subsample_idx(len(slice_data), max_points)
                 slice_data = slice_data[idx]
                 if stab_slice is not None:
                     stab_slice = stab_slice[idx]
@@ -1138,7 +1166,7 @@ class PhaseDiagram5D:
                 pos  = verts[i] + push * (verts[i] - centroid_3d)
                 pl.add_point_labels(
                     [pos], [lbl],
-                    font_size=18, text_color="black", bold=True,
+                    font_size=label_fontsize, text_color="black", bold=True,
                     show_points=False, always_visible=True,
                     shape="rect", shape_color="white", shape_opacity=1.0,
                 )
@@ -1146,13 +1174,13 @@ class PhaseDiagram5D:
         # ── camera ────────────────────────────────────────────────────────
         cam = camera_position or [_PV_CAM_POS, _PV_FOCAL, _PV_CAM_UP]
         pl.camera_position = cam
-        pl.camera.zoom(1.4)
+        pl.camera.zoom(camera_zoom)
 
         # ── title ─────────────────────────────────────────────────────────
         x0_label = self.component_labels[0]
         pl.add_text(
             f"x({x0_label}) = {x0:.3f}",
-            position="upper_left", font_size=14, color="black",
+            position="upper_left", font_size=title_fontsize, color="black",
         )
 
         # ── legend ────────────────────────────────────────────────────────
@@ -1365,8 +1393,10 @@ class PhaseDiagram5D:
             if render == "surface":
                 # PyVista path — extract relevant kwargs, write PNG directly
                 pv_keys = ("mode", "shape_alpha", "window_size",
-                           "camera_position", "show_wireframe",
-                           "show_vertex_labels", "max_points", "min_points",
+                           "camera_position", "camera_zoom",
+                           "show_wireframe", "show_vertex_labels",
+                           "label_fontsize", "title_fontsize",
+                           "max_points", "min_points",
                            "markers", "tielines", "tietriangles",
                            "marker_color", "marker_size",
                            "triangle_color", "triangle_size")
@@ -1610,13 +1640,12 @@ class PhaseDiagram5D:
         # ------------------------------------------------------------------ #
         N = len(pts3d)
         if N > max_points:
-            rng = np.random.default_rng(42)
-            idx = rng.choice(N, size=max_points, replace=False)
+            idx = _subsample_idx(N, max_points)
             pts3d_sub = pts3d[idx]
-            vals_sub = values[idx]
+            vals_sub  = values[idx]
         else:
             pts3d_sub = pts3d
-            vals_sub = values
+            vals_sub  = values
 
         # ------------------------------------------------------------------ #
         # 3. Build a LinearNDInterpolator on the 3-D scattered points         #
@@ -1721,7 +1750,7 @@ class PhaseDiagram5D:
         # ------------------------------------------------------------------ #
         # 6. Axis limits and legend/colorbar                                   #
         # ------------------------------------------------------------------ #
-        buf  = 0.12
+        buf  = 0.04
         mid  = (VERTICES.max(axis=0) + VERTICES.min(axis=0)) * 0.5
         half = (VERTICES.max() - VERTICES.min()) * 0.5 + buf
         ax3d.set_xlim(mid[0] - half, mid[0] + half)
@@ -1872,8 +1901,7 @@ class PhaseDiagram5D:
 
             if len(sd) > 0:
                 if len(sd) > max_points:
-                    rng = np.random.default_rng(42)
-                    idx = rng.choice(len(sd), size=max_points, replace=False)
+                    idx  = _subsample_idx(len(sd), max_points)
                     sd   = sd[idx]
                     if stab is not None:
                         stab = stab[idx]
@@ -1977,8 +2005,7 @@ class PhaseDiagram5D:
                 if self._stability_data is not None else None)
 
         if max_points is not None and len(data) > max_points:
-            rng = np.random.default_rng(42)
-            idx = rng.choice(len(data), size=max_points, replace=False)
+            idx  = _subsample_idx(len(data), max_points)
             data = data[idx]
             if stab is not None:
                 stab = stab[idx]

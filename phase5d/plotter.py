@@ -189,25 +189,25 @@ def _add_pv_scale_bar(
 
     # ── matplotlib legend overlay (lower-left of the image area) ─────────
     if legend_entries:
+        # All geometry constants are defined at the reference dpi (100).
+        # Scale them up linearly so the legend box remains proportional at
+        # higher output_dpi values.
+        dpi_scale = output_dpi / 100
         fs   = legend_fontsize
-        pad  = 6          # pixels of padding inside the box
-        lh   = fs + 6     # row height in pixels
-        sw   = fs + 2     # colour swatch width in pixels
-        gap  = 5          # gap between swatch and text
+        pad  = int(6  * dpi_scale)
+        lh   = int((fs + 6)  * dpi_scale)   # row height
+        sw   = int((fs + 2)  * dpi_scale)   # swatch width
+        gap  = int(5  * dpi_scale)
 
         n    = len(legend_entries)
         box_h_px = n * lh + 2 * pad
-        # 0.72 px per character per pt is a conservative upper bound for
-        # typical sans-serif fonts at 100 dpi — keeps all labels inside the box
         max_chars = max(len(name) for name, _ in legend_entries)
-        box_w_px  = sw + gap + int(max_chars * fs * 0.72) + 2 * pad
+        box_w_px  = sw + gap + int(max_chars * fs * 0.72 * dpi_scale) + 2 * pad
 
         # Convert pixel dimensions to figure-fraction coordinates
         fig_w_px = w
         fig_h_px = total
-        # The image occupies the top h/total of the figure; position box at
-        # lower-left of the image area with a small margin.
-        margin_px = 10
+        margin_px = int(10 * dpi_scale)
         x0_fig = margin_px / fig_w_px
         y0_fig = (bar_px + margin_px) / fig_h_px
         bw_fig = box_w_px / fig_w_px
@@ -1091,11 +1091,19 @@ class PhaseDiagram5D:
             return compositions_to_cartesian(x1, x2, x3, x4, x0=x0, mode=mode)
 
         # ── plotter setup ─────────────────────────────────────────────────
+        # window_size controls the PyVista render resolution independently of
+        # dpi, which only affects the matplotlib compositing step (scale bar
+        # and legend).  Scaling the PyVista window with dpi causes extremely
+        # large framebuffers (e.g. 16 800 × 12 000 at dpi=1200) that exceed
+        # GPU limits and produce a black image.
         pv.global_theme.background = "white"
-        dpi_scale   = dpi / 100            # 100 is the reference dpi
-        eff_window  = (int(window_size[0] * dpi_scale), int(window_size[1] * dpi_scale))
-        pl = pv.Plotter(off_screen=True, window_size=list(eff_window))
+        pl = pv.Plotter(off_screen=True, window_size=list(window_size))
         pl.set_background("white")
+        # Scale PyVista font sizes proportionally when window_size differs
+        # from the reference (1400 px wide) so labels remain legible.
+        _win_scale     = window_size[0] / 1400
+        label_fontsize = int(label_fontsize * _win_scale)
+        title_fontsize = int(title_fontsize * _win_scale)
 
         # ── surfaces ──────────────────────────────────────────────────────
         # Skip surface rendering if the slice is too sparse; render wireframe only.

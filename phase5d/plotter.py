@@ -144,6 +144,7 @@ def _add_pv_scale_bar(
     legend_entries=None,
     legend_fontsize: int = 10,
     scalebar_fontsize: int = 8,
+    output_dpi: int = 100,
 ) -> None:
     """
     Composite a PyVista screenshot with a scale bar strip and save.
@@ -174,11 +175,11 @@ def _add_pv_scale_bar(
     from matplotlib.backends.backend_agg import FigureCanvasAgg
 
     h, w   = img_arr.shape[:2]
-    bar_px = _PV_SCALE_BAR_PX
+    scale  = output_dpi / 100          # 100 is the reference dpi for bar_px
+    bar_px = int(_PV_SCALE_BAR_PX * scale)
     total  = h + bar_px
-    dpi    = 100
 
-    fig = plt.figure(figsize=(w / dpi, total / dpi), dpi=dpi)
+    fig = plt.figure(figsize=(w / output_dpi, total / output_dpi), dpi=output_dpi)
     fig.patch.set_facecolor("white")
 
     # ── main PyVista image (top) ──────────────────────────────────────────
@@ -277,7 +278,7 @@ def _add_pv_scale_bar(
     # ── save without bbox_inches so pixel size is deterministic ──────────
     canvas = FigureCanvasAgg(fig)
     canvas.draw()
-    fig.savefig(out_path, dpi=dpi, facecolor="white")
+    fig.savefig(out_path, dpi=output_dpi, facecolor="white")
     plt.close(fig)
 
 
@@ -984,6 +985,7 @@ class PhaseDiagram5D:
         title_fontsize: int = 14,
         legend_fontsize: int = 16,
         scalebar_fontsize: int = 14,
+        dpi: int = 100,
         max_points: int = 50000,
         min_points: int = 1000,
         markers=None,
@@ -1090,7 +1092,9 @@ class PhaseDiagram5D:
 
         # ── plotter setup ─────────────────────────────────────────────────
         pv.global_theme.background = "white"
-        pl = pv.Plotter(off_screen=True, window_size=list(window_size))
+        dpi_scale   = dpi / 100            # 100 is the reference dpi
+        eff_window  = (int(window_size[0] * dpi_scale), int(window_size[1] * dpi_scale))
+        pl = pv.Plotter(off_screen=True, window_size=list(eff_window))
         pl.set_background("white")
 
         # ── surfaces ──────────────────────────────────────────────────────
@@ -1348,7 +1352,8 @@ class PhaseDiagram5D:
         _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0],
                           legend_entries=_mpl_legend,
                           legend_fontsize=legend_fontsize,
-                          scalebar_fontsize=scalebar_fontsize)
+                          scalebar_fontsize=scalebar_fontsize,
+                          output_dpi=dpi)
         return n_total
 
     def save_frames(
@@ -1402,7 +1407,7 @@ class PhaseDiagram5D:
                            "camera_position", "camera_zoom",
                            "show_wireframe", "show_vertex_labels",
                            "label_fontsize", "title_fontsize",
-                           "legend_fontsize", "scalebar_fontsize",
+                           "legend_fontsize", "scalebar_fontsize", "dpi",
                            "max_points", "min_points",
                            "markers", "tielines", "tietriangles",
                            "marker_color", "marker_size",

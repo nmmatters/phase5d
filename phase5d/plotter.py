@@ -142,6 +142,8 @@ def _add_pv_scale_bar(
     x0: float,
     x0_label: str,
     legend_entries=None,
+    legend_fontsize: int = 10,
+    scalebar_fontsize: int = 8,
 ) -> None:
     """
     Composite a PyVista screenshot with a scale bar strip and save.
@@ -186,7 +188,7 @@ def _add_pv_scale_bar(
 
     # ── matplotlib legend overlay (lower-left of the image area) ─────────
     if legend_entries:
-        fs   = 10         # font size — freely adjustable here
+        fs   = legend_fontsize
         pad  = 6          # pixels of padding inside the box
         lh   = fs + 6     # row height in pixels
         sw   = fs + 2     # colour swatch width in pixels
@@ -258,18 +260,18 @@ def _add_pv_scale_bar(
                   color=_SB_COLOR_FILL, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
 
     # Vertical tick lines (short, upper portion) + labels at bottom of bar
-    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=_SB_FS_TICK, color="black")
-    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=_SB_FS_TICK, color="black")
+    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=scalebar_fontsize, color="black")
+    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=scalebar_fontsize, color="black")
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         ax_b.plot([t, t], [tick_bot, tick_top],
                   color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
         ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="bottom",
-                  fontsize=_SB_FS_TICK, color="black")
+                  fontsize=scalebar_fontsize, color="black")
 
     ax_b.text(
         0.5, 0.97,
         f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
-        ha="center", va="top", fontsize=_SB_FS_HEADER, transform=ax_b.transAxes,
+        ha="center", va="top", fontsize=scalebar_fontsize + 1, transform=ax_b.transAxes,
     )
 
     # ── save without bbox_inches so pixel size is deterministic ──────────
@@ -978,8 +980,10 @@ class PhaseDiagram5D:
         camera_zoom: float = 1.4,
         show_wireframe: bool = True,
         show_vertex_labels: bool = True,
-        label_fontsize: int = 18,
+        label_fontsize: int = 28,
         title_fontsize: int = 14,
+        legend_fontsize: int = 16,
+        scalebar_fontsize: int = 14,
         max_points: int = 50000,
         min_points: int = 1000,
         markers=None,
@@ -1157,6 +1161,11 @@ class PhaseDiagram5D:
                 pl.add_mesh(pv.Line(verts[i], verts[j]), color="black", line_width=2)
 
         # ── vertex labels ─────────────────────────────────────────────────
+        # ── camera ────────────────────────────────────────────────────────
+        cam = camera_position or [_PV_CAM_POS, _PV_FOCAL, _PV_CAM_UP]
+        pl.camera_position = cam
+        pl.camera.zoom(camera_zoom)
+
         if show_vertex_labels:
             verts = tetrahedron_display_vertices(x0, mode)
             centroid_3d = verts.mean(axis=0)
@@ -1170,11 +1179,6 @@ class PhaseDiagram5D:
                     show_points=False, always_visible=True,
                     shape="rect", shape_color="white", shape_opacity=1.0,
                 )
-
-        # ── camera ────────────────────────────────────────────────────────
-        cam = camera_position or [_PV_CAM_POS, _PV_FOCAL, _PV_CAM_UP]
-        pl.camera_position = cam
-        pl.camera.zoom(camera_zoom)
 
         # ── title ─────────────────────────────────────────────────────────
         x0_label = self.component_labels[0]
@@ -1342,7 +1346,9 @@ class PhaseDiagram5D:
         # Composite PyVista render with matplotlib scale bar + legend
         _mpl_legend = legend_entries if self.value_type == "phase_stability" else None
         _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0],
-                          legend_entries=_mpl_legend)
+                          legend_entries=_mpl_legend,
+                          legend_fontsize=legend_fontsize,
+                          scalebar_fontsize=scalebar_fontsize)
         return n_total
 
     def save_frames(
@@ -1396,6 +1402,7 @@ class PhaseDiagram5D:
                            "camera_position", "camera_zoom",
                            "show_wireframe", "show_vertex_labels",
                            "label_fontsize", "title_fontsize",
+                           "legend_fontsize", "scalebar_fontsize",
                            "max_points", "min_points",
                            "markers", "tielines", "tietriangles",
                            "marker_color", "marker_size",

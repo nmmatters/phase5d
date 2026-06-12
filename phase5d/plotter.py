@@ -175,8 +175,10 @@ def _add_pv_scale_bar(
     from matplotlib.backends.backend_agg import FigureCanvasAgg
 
     h, w   = img_arr.shape[:2]
-    scale  = output_dpi / 100          # 100 is the reference dpi for bar_px
-    bar_px = int(_PV_SCALE_BAR_PX * scale)
+    # Scale bar height tracks image width (window_size); DPI is only a metadata/
+    # compositing parameter and must NOT affect the strip pixel height.
+    _img_scale = w / 1400               # relative to the 1400-px reference window
+    bar_px = int(_PV_SCALE_BAR_PX * _img_scale)
     total  = h + bar_px
 
     fig = plt.figure(figsize=(w / output_dpi, total / output_dpi), dpi=output_dpi)
@@ -189,54 +191,49 @@ def _add_pv_scale_bar(
 
     # ── matplotlib legend overlay (lower-left of the image area) ─────────
     if legend_entries:
-        # All geometry constants are defined at the reference dpi (100).
-        # Scale them up linearly so the legend box remains proportional at
-        # higher output_dpi values.
-        dpi_scale = output_dpi / 100
-        fs   = legend_fontsize
-        pad  = int(6  * dpi_scale)
-        lh   = int((fs + 6)  * dpi_scale)   # row height
-        sw   = int((fs + 2)  * dpi_scale)   # swatch width
-        gap  = int(5  * dpi_scale)
+        # Size everything in OUTPUT PIXELS so appearance is DPI-independent.
+        # font_px: pixel height of the legend text in the final image.
+        # fs:      same value expressed in pt for matplotlib (pt = px*72/dpi).
+        _norm    = _img_scale * (100 / output_dpi)   # pt→px normalisation
+        font_px  = legend_fontsize * _img_scale * 100 / 72
+        fs       = font_px * 72 / output_dpi          # == legend_fontsize * _norm
+        pad_px   = max(4, int(font_px * 0.3))
+        lh_px    = int(font_px * 1.4)
+        sw_px    = int(font_px)
+        gap_px   = max(3, int(font_px * 0.3))
 
-        n    = len(legend_entries)
-        box_h_px = n * lh + 2 * pad
+        n         = len(legend_entries)
         max_chars = max(len(name) for name, _ in legend_entries)
-        box_w_px  = sw + gap + int(max_chars * fs * 0.72 * dpi_scale) + 2 * pad
+        box_h_px  = int(n * lh_px + 2 * pad_px)
+        box_w_px  = int(sw_px + gap_px + max_chars * font_px * 0.60 + 2 * pad_px)
 
-        # Convert pixel dimensions to figure-fraction coordinates
-        fig_w_px = w
-        fig_h_px = total
-        margin_px = int(10 * dpi_scale)
-        x0_fig = margin_px / fig_w_px
-        y0_fig = (bar_px + margin_px) / fig_h_px
-        bw_fig = box_w_px / fig_w_px
-        bh_fig = box_h_px / fig_h_px
+        margin_px = int(10 * _img_scale)
+        x0_fig = margin_px / w
+        y0_fig = (bar_px + margin_px) / total
+        bw_fig = box_w_px / w
+        bh_fig = box_h_px / total
 
         ax_leg = fig.add_axes([x0_fig, y0_fig, bw_fig, bh_fig])
         ax_leg.set_xlim(0, box_w_px)
         ax_leg.set_ylim(0, box_h_px)
         ax_leg.axis("off")
 
-        # Gray background box
         ax_leg.add_patch(_mpatches.FancyBboxPatch(
             (0, 0), box_w_px, box_h_px,
             boxstyle="square,pad=0",
-            facecolor="#cccccc", edgecolor="#888888", linewidth=0.8,
+            facecolor="#cccccc", edgecolor="#888888", linewidth=0.8 * _norm,
             transform=ax_leg.transData, zorder=1,
         ))
 
         for i, (name, color) in enumerate(legend_entries):
-            row_y = box_h_px - pad - (i + 1) * lh + (lh - sw) / 2
-            # Colour swatch
+            row_y = box_h_px - pad_px - (i + 1) * lh_px + (lh_px - sw_px) / 2
             ax_leg.add_patch(_mpatches.Rectangle(
-                (pad, row_y), sw, sw,
-                facecolor=color, edgecolor="#555555", linewidth=0.5,
+                (pad_px, row_y), sw_px, sw_px,
+                facecolor=color, edgecolor="#555555", linewidth=0.5 * _norm,
                 transform=ax_leg.transData, zorder=2,
             ))
-            # Label
             ax_leg.text(
-                pad + sw + gap, row_y + sw / 2,
+                pad_px + sw_px + gap_px, row_y + sw_px / 2,
                 name,
                 va="center", ha="left",
                 fontsize=fs, color="black",
@@ -244,6 +241,8 @@ def _add_pv_scale_bar(
             )
 
     # ── scale bar strip (bottom) ──────────────────────────────────────────
+    _sb_norm = _img_scale * (100 / output_dpi)
+    _sb_fs = scalebar_fontsize * _sb_norm
     ax_b = fig.add_axes([0.04, 0.002, 0.92, (bar_px / total) * 0.88])
     scale = 1.0 - x0
     ax_b.set_xlim(0, 1)
@@ -254,25 +253,26 @@ def _add_pv_scale_bar(
     tick_bot = _SB_BAR_Y + _SB_BAR_H * _SB_TICK_FRAC
     tick_top = _SB_BAR_Y + _SB_BAR_H
 
+    _lw = 0.8 * _sb_norm
     ax_b.barh(_SB_BAR_Y, 1.0,   left=0.0, height=_SB_BAR_H,
-              color=_SB_COLOR_BG, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
+              color=_SB_COLOR_BG, edgecolor=_SB_COLOR_EDGE, linewidth=_lw)
     if scale > 0:
         ax_b.barh(_SB_BAR_Y, scale, left=0.0, height=_SB_BAR_H,
-                  color=_SB_COLOR_FILL, edgecolor=_SB_COLOR_EDGE, linewidth=0.8)
+                  color=_SB_COLOR_FILL, edgecolor=_SB_COLOR_EDGE, linewidth=_lw)
 
     # Vertical tick lines (short, upper portion) + labels at bottom of bar
-    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=scalebar_fontsize, color="black")
-    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=scalebar_fontsize, color="black")
+    ax_b.text(0.0, lbl_y, "0", ha="left",  va="bottom", fontsize=_sb_fs, color="black")
+    ax_b.text(1.0, lbl_y, "1", ha="right", va="bottom", fontsize=_sb_fs, color="black")
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         ax_b.plot([t, t], [tick_bot, tick_top],
-                  color="white", linewidth=0.9, zorder=3, solid_capstyle="butt")
+                  color="white", linewidth=0.9 * _sb_norm, zorder=3, solid_capstyle="butt")
         ax_b.text(t, lbl_y, f"{t:.1f}", ha="center", va="bottom",
-                  fontsize=scalebar_fontsize, color="black")
+                  fontsize=_sb_fs, color="black")
 
     ax_b.text(
         0.5, 0.97,
         f"composition scale  (1 − x({x0_label}) = {scale:.3f})",
-        ha="center", va="top", fontsize=scalebar_fontsize + 1, transform=ax_b.transAxes,
+        ha="center", va="top", fontsize=_sb_fs + 1, transform=ax_b.transAxes,
     )
 
     # ── save without bbox_inches so pixel size is deterministic ──────────

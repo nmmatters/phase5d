@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: >-
+  If you use phase5d in your research and publish the results,
+  please cite the software as below. A journal article is in
+  preparation; this entry will be updated when it is available.
+type: software
+title: "phase5d: 5D phase diagram visualization for high-entropy alloys"
+authors:
+  - family-names: Marschall
+    given-names: Niklas
+version: "0.1.0"
+date-released: "2026-06-12"
+license: MIT
+repository-code: "https://github.com/nmmatters/phase5d"
+url: "https://github.com/nmmatters/phase5d"
+keywords:
+  - high-entropy alloys
+  - phase diagram
+  - CALPHAD
+  - materials science
+  - visualization

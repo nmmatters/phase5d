@@ -24,6 +24,33 @@ __all__ = [
     "generate_grid_data",
     "x0_grid",
     "validate_data",
+    "cite",
 ]
 
 __version__ = "0.1.0"
+
+__citation__ = """\
+If you use phase5d in published research, please cite:
+
+  N. Marschall, phase5d: 5D phase diagram visualization for high-entropy
+  alloys (2026). https://github.com/nmmatters/phase5d
+
+BibTeX:
+
+  @software{marschall_phase5d_2026,
+    author  = {Marschall, Niklas},
+    title   = {{phase5d}: 5D phase diagram visualization for high-entropy alloys},
+    year    = {2026},
+    version = {0.1.0},
+    url     = {https://github.com/nmmatters/phase5d},
+    license = {MIT},
+  }
+
+A journal article is in preparation. The citation will be updated when
+it is available.
+"""
+
+
+def cite() -> None:
+    """Print the citation information for phase5d."""
+    print(__citation__)

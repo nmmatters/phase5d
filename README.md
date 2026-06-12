@@ -651,6 +651,38 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
+## Citation
+
+If you use **phase5d** in your research and publish the results, please cite
+the software.  A journal article describing the method is in preparation; this
+section will be updated when it is available.  Until then, please cite the
+repository directly:
+
+```bibtex
+@software{marschall_phase5d_2026,
+  author    = {Marschall, Niklas},
+  title     = {{phase5d}: 5D phase diagram visualization for high-entropy alloys},
+  year      = {2026},
+  version   = {0.1.0},
+  url       = {https://github.com/nmmatters/phase5d},
+  license   = {MIT},
+}
+```
+
+Or in plain text:
+
+> N. Marschall, *phase5d: 5D phase diagram visualization for high-entropy
+> alloys* (2026). https://github.com/nmmatters/phase5d
+
+You can also retrieve the citation programmatically:
+
+```python
+import phase5d
+phase5d.cite()
+```
+
+---
+
 ## Built with Claude Code
 
 This library was developed with the assistance of

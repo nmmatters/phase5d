@@ -1,17 +1,15 @@
 """
 Render the FeMnNiCoCu phase-stability map using phase5d.
 
-Loads a TCHEA4 .dat file from data/ and renders phase-stability frames
-or a full video sweep using PhaseDiagram5D.
-
-Column layout of the .dat file:
-  Gm GmxMn GmxNi GmxCo GmxCu Hmr ... xMn xNi xCo xCu QF
-  indices:                         15   16   17   18  19
-
-QF thresholds:
-  QF < 0     -> unstable   (-1)
-  0 <= QF <= 1 -> meta-stable (0)
-  QF > 1     -> stable      (1)
+Data sources (both must share the same row order):
+  .dat file  — TCHEA4 raw output; columns 15-18 give x(Mn/Ni/Co/Cu),
+               column 19 is QF (smallest Hessian eigenvalue, used only
+               to identify and remove sentinel rows with QF >= 1e4).
+  .npz file  — pre-processed phase diagram; array 'phase_diagram_data'
+               contains the stability_function label per row:
+                 -1  unstable    (QF < 0, i.e. negative Hessian eigenvalue)
+                  0  meta-stable (neither unstable nor a 1-phase simplex vertex)
+                  1  stable      (vertices of 1-phase simplices, convex hull)
 
 Usage
 -----
@@ -20,7 +18,7 @@ Usage
   python render_stability.py --video                 # full sweep (auto-trimmed)
   python render_stability.py --video --x0max 0.50   # partial sweep
   python render_stability.py --scatter               # matplotlib scatter mode
-  python render_stability.py --file tchea4_873k.dat  # specific data file
+  python render_stability.py --file tchea4_873k.dat  # specific .dat file
 """
 
 import argparse
@@ -69,7 +67,6 @@ def _resolve_dat(requested: str = None) -> str:
             raise FileNotFoundError(f"Data file not found: {requested}")
         return path
 
-    # Auto-detect: use the first .dat file in data/
     candidates = sorted(glob.glob(os.path.join(DATA_DIR, "*.dat")))
     if not candidates:
         raise FileNotFoundError(
@@ -84,29 +81,64 @@ def _resolve_dat(requested: str = None) -> str:
     return candidates[0]
 
 
-def load_data(dat_path: str) -> np.ndarray:
-    """
-    Load a TCHEA4 .dat file and return a phase5d-compatible (N, 5) array.
+def _resolve_npz(dat_path: str) -> str:
+    """Find the .npz stability file that pairs with the given .dat file.
 
-    Columns: [xMn, xNi, xCo, xCu, stability_label]
-    phase5d reads x0 = xFe = 1 - xMn - xNi - xCo - xCu implicitly.
+    Looks for a .npz in data/ whose name shares the temperature token
+    (e.g. '873k') with the .dat stem.  Falls back to the first .npz found.
     """
-    print(f"Loading data from {dat_path} ...")
+    stem = os.path.splitext(os.path.basename(dat_path))[0]
+    # Try to match by temperature token (e.g. '873k')
+    tokens = [t for t in stem.lower().split("_") if t.endswith("k") and t[:-1].isdigit()]
+    candidates = sorted(glob.glob(os.path.join(DATA_DIR, "*.npz")))
+    if tokens:
+        matched = [c for c in candidates if tokens[0] in os.path.basename(c).lower()]
+        if matched:
+            return matched[0]
+    if candidates:
+        return candidates[0]
+    raise FileNotFoundError(
+        f"No .npz stability file found in {DATA_DIR}.\n"
+        "Expected a file like 'mapped_phase_diagram_data_873k_10x.npz'."
+    )
+
+
+def load_data(dat_path: str) -> np.ndarray:
+    """Load compositions from a .dat file and stability labels from the paired .npz.
+
+    Returns a phase5d-compatible (N, 5) array:
+      columns: [xMn, xNi, xCo, xCu, stability_function]
+    phase5d infers x0 = x(Fe) = 1 - xMn - xNi - xCo - xCu implicitly.
+
+    The stability_function column comes from the .npz 'phase_diagram_data' array:
+      -1  unstable    (negative Hessian eigenvalue, QF < 0)
+       0  meta-stable
+       1  stable      (1-phase simplex vertex from convex hull)
+    QF from the .dat is used only to identify and drop sentinel rows (QF >= 1e4).
+    """
+    npz_path = _resolve_npz(dat_path)
+    print(f"Loading compositions from {os.path.basename(dat_path)} ...")
+    print(f"Loading stability labels from {os.path.basename(npz_path)} ...")
     t0  = time.time()
     raw = np.loadtxt(dat_path, skiprows=1)
     print(f"  {len(raw):,} rows loaded in {time.time()-t0:.1f}s")
 
+    stability = np.load(npz_path)["phase_diagram_data"]
+    if len(stability) != len(raw):
+        raise ValueError(
+            f"Row count mismatch: {os.path.basename(dat_path)} has {len(raw):,} rows "
+            f"but {os.path.basename(npz_path)} has {len(stability):,} entries."
+        )
+
     x_mn, x_ni, x_co, x_cu = raw[:, 15], raw[:, 16], raw[:, 17], raw[:, 18]
     qf = raw[:, 19]
 
-    # Remove sentinel values (pure-component reference rows)
+    # Drop sentinel rows (pure-component reference points, QF >> 1)
     valid = qf < 1e4
-    x_mn, x_ni, x_co, x_cu, qf = (
-        x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid], qf[valid]
-    )
+    x_mn, x_ni, x_co, x_cu = x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid]
+    stability = stability[valid]
 
-    labels = np.where(qf < 0, -1, np.where(qf <= 1, 0, 1))
-    data   = np.column_stack([x_mn, x_ni, x_co, x_cu, labels.astype(float)])
+    data = np.column_stack([x_mn, x_ni, x_co, x_cu, stability])
     print(f"  {len(data):,} valid points after filtering")
     return data
 
@@ -150,7 +182,8 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     dat_path = _resolve_dat(args.file)
-    stem     = os.path.splitext(os.path.basename(dat_path))[0]
+    npz_path = _resolve_npz(dat_path)
+    stem     = os.path.splitext(os.path.basename(npz_path))[0]
     data     = load_data(dat_path)
     diag     = make_diagram(data)
 

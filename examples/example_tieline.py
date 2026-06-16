@@ -25,6 +25,7 @@ Requires:  pip install pyvista scipy
 Outputs are saved to the output/ directory.
 """
 
+import glob
 import os
 import time
 
@@ -39,39 +40,44 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # ── Load or generate data ──────────────────────────────────────────────────────
 if os.path.isfile(REAL_DAT):
-    print(f"Loading real CALPHAD data: {REAL_DAT}")
+    # Stability labels come from the pre-processed .npz (stability_function):
+    #   -1  unstable    (negative Hessian eigenvalue, QF < 0)
+    #    0  meta-stable
+    #    1  stable      (1-phase simplex vertices from convex hull)
+    # QF from the .dat is used only to drop sentinel rows (QF >= 1e4).
+    npz_candidates = sorted(glob.glob(os.path.join("data", "mapped_phase_diagram_data_*.npz")))
+    if not npz_candidates:
+        raise FileNotFoundError("No mapped_phase_diagram_data_*.npz found in data/")
+    REAL_NPZ = npz_candidates[0]
+
+    print(f"Loading compositions from {REAL_DAT}")
+    print(f"Loading stability labels from {REAL_NPZ}")
     t0  = time.time()
     raw = np.loadtxt(REAL_DAT, skiprows=1)
     print(f"  {len(raw):,} rows loaded in {time.time()-t0:.1f}s")
 
-    # Column layout: Gm GmxMn GmxNi GmxCo GmxCu Hmr ... xMn xNi xCo xCu QF
+    stability = np.load(REAL_NPZ)["phase_diagram_data"]
+
     x_mn, x_ni, x_co, x_cu = raw[:, 15], raw[:, 16], raw[:, 17], raw[:, 18]
     qf = raw[:, 19]
 
-    # Remove sentinel values (pure-component reference rows)
+    # Drop sentinel rows (pure-component reference points, QF >> 1)
     valid = qf < 1e4
-    x_mn, x_ni, x_co, x_cu, qf = (
-        x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid], qf[valid]
-    )
+    x_mn, x_ni, x_co, x_cu = x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid]
+    stability = stability[valid]
 
-    # QF thresholds:  <0 -> unstable (-1),  0..1 -> meta-stable (0),  >1 -> stable (1)
-    labels = np.where(qf < 0, -1, np.where(qf <= 1, 0, 1))
-
-    # Build (N, 5) array: [xMn, xNi, xCo, xCu, label]
-    # x(Fe) = 1 - xMn - xNi - xCo - xCu  (implicit, handled by x0='implicit')
-    data = np.column_stack([x_mn, x_ni, x_co, x_cu, labels.astype(float)])
+    data = np.column_stack([x_mn, x_ni, x_co, x_cu, stability])
 
     component_labels = ["Fe", "Mn", "Ni", "Co", "Cu"]
     using_real_data  = True
 
     # ── Two-phase equilibrium compositions  [x(Fe), xMn, xNi, xCo, xCu] ────────
-    # Compositions span x(Fe) = 0.00 -> 0.24 so the tie-line is visible
-    # across the first 25 frames of the sweep below.
-    NOMINAL = [0.10, 0.23, 0.22, 0.22, 0.23]  # near-equimolar alloy
-    PHASE_A = [0.05, 0.59, 0.16, 0.12, 0.08]  # Mn-rich phase (low Fe end)
-    PHASE_B = [0.22, 0.12, 0.22, 0.22, 0.22]  # Fe-rich phase (high Fe end)
+    # Tie-line spans x(Fe) = 0.00 (Cu-rich) -> 0.26 (near-equimolar).
+    PHASE_A = [0.26, 0.12, 0.25, 0.26, 0.11]  # Fe/Co/Ni-rich phase
+    PHASE_B = [0.00, 0.03, 0.05, 0.01, 0.92]  # Cu-rich phase
+    NOMINAL = [0.13, 0.075, 0.15, 0.135, 0.51]  # midpoint along tie-line
 
-    x0_start, x0_end, x0_step = 0.00, 0.25, 0.01
+    x0_start, x0_end, x0_step = 0.00, 0.27, 0.01
 
 else:
     print("Real data not found — using synthetic stability function.")

@@ -11,20 +11,32 @@ then sweeping x₀ from 0 → 1 to produce a video of the complete phase space.
 
 ## Demo
 
-<video src="media/femnnicocu_pv_surface.mp4" width="100%" autoplay loop muted playsinline controls></video>
+<video src="media/stability_mapped_phase_diagram_data_873k_10x_surface.mp4" width="100%" autoplay loop muted playsinline controls></video>
 
-**FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0.00 to 1.00
-in steps of 0.01.  Each frame is a cross-section of the four-component
-(Mn–Ni–Co–Cu) composition space at fixed Fe content.
+**FeMnNiCoCu at 873 K** — CALPHAD phase stability, x(Fe) swept from 0.00 to 0.83
+in steps of 0.01 (84 frames; sparse frames above x(Fe) = 0.83 are auto-trimmed).
+Each frame is a cross-section of the four-component (Mn–Ni–Co–Cu) composition
+space at fixed Fe content.
 
-| Color | Phase |
-|-------|-------|
-| Dark gray (opaque) | Unstable |
+| Color | Region |
+|-------|--------|
+| Dark gray (opaque) | Unstable — negative Hessian eigenvalue |
 | Light gray (semi-transparent) | Meta-stable |
-| Transparent | Stable single-phase region |
+| Transparent | Stable single-phase region (convex-hull vertices) |
 
-Rendered with `render='surface'` (PyVista, adaptive alpha shapes, 101 frames,
-`mode='fixed'`).
+Stability labels are derived from CALPHAD data: `−1` marks compositions with a
+negative smallest Hessian eigenvalue (spinodal instability); `1` marks vertices
+of one-phase simplices identified by the convex hull; all remaining compositions
+are `0` (meta-stable).
+
+Rendered with `render='surface'` (PyVista, adaptive alpha shapes, `mode='fixed'`).
+
+<video src="media/tieline_sweep.mp4" width="100%" autoplay loop muted playsinline controls></video>
+
+**FeMnNiCoCu two-phase tie-line** — the red sphere tracks the tie-line intersection
+as x(Fe) sweeps from 0.00 to 0.26.  Equilibrium endpoints:
+Fe₀.₂₆Mn₀.₁₂Ni₀.₂₅Co₀.₂₆Cu₀.₁₁ (Fe/Co/Ni-rich) and
+Fe₀.₀₀Mn₀.₀₃Ni₀.₀₅Co₀.₀₁Cu₀.₉₂ (Cu-rich).
 
 ---
 
@@ -278,6 +290,14 @@ pd5 = PhaseDiagram5D(
 
 ### Phase stability labels (−1 / 0 / 1)
 
+Labels are integer indicators — not physical values — assigned from CALPHAD data:
+
+| Label | Region | Criterion |
+|-------|--------|-----------|
+| `−1` | Unstable | Negative smallest Hessian eigenvalue (spinodal instability) |
+| `0` | Meta-stable | Neither unstable nor a convex-hull 1-phase vertex |
+| `1` | Stable | Vertex of a one-phase simplex (convex hull) |
+
 ```python
 pd5 = PhaseDiagram5D(
     data,
@@ -391,6 +411,7 @@ Renders a single high-quality surface frame off-screen and saves it as a PNG.
 | `marker_size` | `18` | Sphere point size for markers and tie-line intersections |
 | `triangle_color` | `'orange'` | Color of tie-simplex edges and spheres |
 | `triangle_size` | `14` | Sphere point size for tie-simplex intersection points |
+| `dpi` | `100` | DPI for the matplotlib compositing layer (scale bar, legend). Does **not** affect PyVista render resolution — use `window_size` for that. |
 
 Returns the total number of points in the slice.
 
@@ -405,20 +426,21 @@ Returns the total number of points in the slice.
 Two equilibrium compositions connected by a tie-line.  Where the x₀ plane intersects the line, a single red sphere is shown.
 
 ```python
-NOMINAL = [0.20, 0.10, 0.20, 0.20, 0.30]   # nominal alloy composition
-PHASE_A = [0.22, 0.21, 0.21, 0.21, 0.15]   # equilibrium phase A
-PHASE_B = [0.00, 0.07, 0.06, 0.01, 0.86]   # equilibrium phase B
+# FeMnNiCoCu two-phase equilibrium at 873 K  [x(Fe), xMn, xNi, xCo, xCu]
+PHASE_A = [0.26, 0.12, 0.25, 0.26, 0.11]   # Fe/Co/Ni-rich phase
+PHASE_B = [0.00, 0.03, 0.05, 0.01, 0.92]   # Cu-rich phase
+NOMINAL = [0.13, 0.075, 0.15, 0.135, 0.51] # midpoint along tie-line
 
 pd5.save_frame_surface(
-    x0=0.20, out_path='frame_tieline.png',
+    x0=0.13, out_path='frame_tieline.png',
     markers=[NOMINAL],
     tielines=[[PHASE_A, PHASE_B]],
 )
 
 pd5.create_video(
-    x0_values=np.round(np.arange(0.00, 0.23, 0.01), 3),
+    x0_values=np.round(np.arange(0.00, 0.27, 0.01), 3),
     output_path='tieline.mp4',
-    fps=3, render='surface',
+    fps=10, render='surface',
     markers=[NOMINAL],
     tielines=[[PHASE_A, PHASE_B]],
 )
@@ -439,9 +461,7 @@ pd5.save_frame_surface(
 )
 ```
 
-<video src="media/femnnicocu_pv_tietriangle.mp4" width="100%" autoplay loop muted playsinline controls></video>
-
-**FeMnNiCoCu tie-triangle example** — three equilibrium phases, x(Fe) swept from 0.00 to 0.24.
+See `examples/example_tieline.py` for a full working script including video sweep.
 
 #### Four-phase equilibrium (tie-tetrahedron) and beyond
 
@@ -633,12 +653,13 @@ python examples/example_tieline.py            # requires: pip install pyvista
   index to create a rotating video.
 - **Colormap**: `'RdBu_r'` works well for enthalpy (red = positive,
   blue = negative); `'plasma'` for monotone properties.
-- **Surface video render time**: a full 101-frame video with `render='surface'`
-  at `step=0.01` takes roughly **15–20 minutes** on a modern desktop (tested on
-  FeMnNiCoCu TCHEA4 at 873 K).  Dense slices near x₀ = 0 contain up to ~177 k
-  points; the alpha-shape Delaunay triangulation scales super-linearly with point
-  count.  Slices near x₀ = 1 finish in under 1 s.  For a quick preview use every
-  5th frame (`x0_values=np.arange(0.00, 1.01, 0.05)`) which completes in ~3 minutes.
+- **Surface video render time**: an auto-trimmed 84-frame video with `render='surface'`
+  at `step=0.01` takes roughly **25 minutes** on a modern desktop (tested on
+  FeMnNiCoCu TCHEA4 at 873 K, x(Fe) 0.00→0.83).  Dense slices near x₀ = 0 contain
+  up to ~177 k points; the alpha-shape Delaunay triangulation scales super-linearly
+  with point count.  Slices near x₀ = 0.83 finish in under 1 s.  For a quick
+  preview use every 5th frame (`x0_values=np.arange(0.00, 0.85, 0.05)`) which
+  completes in ~5 minutes.
 - **ffmpeg not found?** `from phase5d.video import check_ffmpeg; print(check_ffmpeg())`
 - **Interactive exploration**: `pd5.show_interactive()` opens a live window with sliders for x₀, elevation, and azimuth — no video needed.
 - **ParaView export**: `pd5.save_vtk('diagram.vtu')` writes the full point cloud with all scalar fields; use Threshold on `x0` and Contour on `value` in ParaView for fully interactive 3-D analysis.

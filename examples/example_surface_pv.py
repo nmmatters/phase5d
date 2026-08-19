@@ -18,6 +18,7 @@ Requires:  pip install pyvista scipy
 Outputs are saved to the output/ directory.
 """
 
+import glob
 import os
 import time
 
@@ -32,27 +33,33 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # ── Load or generate data ──────────────────────────────────────────────────────
 if os.path.isfile(REAL_DAT):
-    print(f"Loading real CALPHAD data: {REAL_DAT}")
+    # Stability labels come from the pre-processed .npz (stability_function):
+    #   -1  unstable    (negative Hessian eigenvalue, QF < 0)
+    #    0  meta-stable
+    #    1  stable      (1-phase simplex vertices from convex hull)
+    # QF from the .dat is used only to drop sentinel rows (QF >= 1e4).
+    npz_candidates = sorted(glob.glob(os.path.join("data", "mapped_phase_diagram_data_*.npz")))
+    if not npz_candidates:
+        raise FileNotFoundError("No mapped_phase_diagram_data_*.npz found in data/")
+    REAL_NPZ = npz_candidates[0]
+
+    print(f"Loading compositions from {REAL_DAT}")
+    print(f"Loading stability labels from {REAL_NPZ}")
     t0  = time.time()
     raw = np.loadtxt(REAL_DAT, skiprows=1)
     print(f"  {len(raw):,} rows loaded in {time.time()-t0:.1f}s")
 
-    # Column layout: Gm GmxMn GmxNi GmxCo GmxCu Hmr ... xMn xNi xCo xCu QF
+    stability = np.load(REAL_NPZ)["phase_diagram_data"]
+
     x_mn, x_ni, x_co, x_cu = raw[:, 15], raw[:, 16], raw[:, 17], raw[:, 18]
     qf = raw[:, 19]
 
-    # Remove sentinel values (pure-component reference rows)
+    # Drop sentinel rows (pure-component reference points, QF >> 1)
     valid = qf < 1e4
-    x_mn, x_ni, x_co, x_cu, qf = (
-        x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid], qf[valid]
-    )
+    x_mn, x_ni, x_co, x_cu = x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid]
+    stability = stability[valid]
 
-    # QF thresholds:  <0 → unstable (-1),  0..1 → meta-stable (0),  >1 → stable (1)
-    labels = np.where(qf < 0, -1, np.where(qf <= 1, 0, 1))
-
-    # Build (N, 5) array: [x1=xMn, x2=xNi, x3=xCo, x4=xCu, value=label]
-    # x0 = x(Fe) = 1 - xMn - xNi - xCo - xCu  (implicit, handled by x0='implicit')
-    data = np.column_stack([x_mn, x_ni, x_co, x_cu, labels.astype(float)])
+    data = np.column_stack([x_mn, x_ni, x_co, x_cu, stability])
 
     component_labels = ["Fe", "Mn", "Ni", "Co", "Cu"]
     x0_label         = "x(Fe)"
@@ -141,3 +148,14 @@ try:
 except ImportError:
     print("PyVista not installed — skipping surface rendering.")
     print("Install with:  pip install pyvista scipy")
+
+# ── VTK export for ParaView ────────────────────────────────────────────────────
+# Exports the full point cloud as a .vtu file with all composition fractions
+# and the stability label as scalar fields.  Open in ParaView and use:
+#   Threshold on x0    -> slice by Fe content interactively
+#   Contour on value   -> extract stability boundaries
+#   Point Gaussian     -> scatter-style rendering coloured by any field
+print("\nExporting VTK dataset ...")
+t_vtk    = time.time()
+vtu_path = pd5.save_vtk(os.path.join(OUT_DIR, "femnnicocu_phase_stability.vtu"))
+print(f"  Done in {time.time()-t_vtk:.1f}s  ->  {vtu_path}")

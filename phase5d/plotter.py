@@ -1964,6 +1964,7 @@ class PhaseDiagram5D:
         output_path: str,
         max_points: Optional[int] = None,
         include_compositions: bool = True,
+        x0_filter: Optional[float] = None,
     ) -> str:
         """
         Export the dataset as a VTK XML Unstructured Grid (``.vtu``) file for
@@ -2005,6 +2006,10 @@ class PhaseDiagram5D:
         include_compositions : bool
             Write individual ``x0`` … ``x4`` scalar fields (default ``True``).
             Set to ``False`` to reduce file size.
+        x0_filter : float or None
+            If set, export only points whose x₀ value is within ``tolerance``
+            of this value (i.e. a single composition slice).  Useful for
+            writing one ``.vtu`` per frame of a video sweep.
 
         Returns
         -------
@@ -2023,6 +2028,12 @@ class PhaseDiagram5D:
         data = self.data.copy()   # (N, 6)
         stab = (self._stability_data.copy()
                 if self._stability_data is not None else None)
+
+        if x0_filter is not None:
+            mask = np.abs(data[:, 0] - x0_filter) <= self.tolerance
+            data = data[mask]
+            if stab is not None:
+                stab = stab[mask]
 
         if max_points is not None and len(data) > max_points:
             idx  = _subsample_idx(len(data), max_points)

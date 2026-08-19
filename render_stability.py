@@ -177,6 +177,9 @@ def main():
                         help="Use matplotlib scatter instead of PyVista surface")
     parser.add_argument("--fps",   type=int, default=10,
                         help="Video frame rate (default 10)")
+    parser.add_argument("--vtk",   action="store_true",
+                        help="Export one .vtu file per x0 slice into "
+                             "output/vtk_<stem>/ (can be combined with --video)")
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -251,6 +254,19 @@ def main():
                 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
                 plt.close(fig)
         print(f"  Done in {time.time()-t0:.1f}s  ->  {out}")
+
+    # ── VTK export (per-slice .vtu files) ─────────────────────────────────────
+    if args.vtk:
+        vtk_dir = os.path.join(OUTPUT_DIR, f"vtk_{stem}")
+        os.makedirs(vtk_dir, exist_ok=True)
+        slices  = x0_values if args.video else [args.x0]
+        print(f"\nExporting {len(slices)} VTU slice(s) -> {vtk_dir}")
+        t_vtk = time.time()
+        for x0 in slices:
+            vtu_out = os.path.join(vtk_dir, f"slice_x0_{x0:.3f}.vtu")
+            diag.save_vtk(vtu_out, x0_filter=x0)
+            print(f"  x(Fe)={x0:.3f}  ->  {os.path.basename(vtu_out)}")
+        print(f"VTU export done in {time.time()-t_vtk:.1f}s")
 
 
 if __name__ == "__main__":

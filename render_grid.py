@@ -149,6 +149,48 @@ def render_frames(diag, frames_dir, window_size, force=False):
 
 
 # ---------------------------------------------------------------------------
+# Image cropping helper
+# ---------------------------------------------------------------------------
+
+def _crop_white(img, border_px=4, threshold=0.97):
+    """Crop white border from a float32 or uint8 RGBA/RGB image.
+
+    Finds the bounding box of all pixels darker than `threshold` on any
+    channel (ignoring the alpha channel when present), then expands by
+    `border_px` on each side.  Returns the cropped array.
+    """
+    if img.dtype != np.float32 and img.dtype != np.float64:
+        img_f = img.astype(np.float32) / 255.0
+    else:
+        img_f = img
+
+    # Use only RGB channels
+    rgb = img_f[:, :, :3]
+
+    # Mask of non-white pixels (any channel below threshold)
+    mask = np.any(rgb < threshold, axis=2)
+
+    rows = np.where(mask.any(axis=1))[0]
+    cols = np.where(mask.any(axis=0))[0]
+
+    if rows.size == 0 or cols.size == 0:
+        return img   # fully white — return as-is
+
+    r0 = max(0, rows[0]  - border_px)
+    r1 = min(img.shape[0], rows[-1]  + border_px + 1)
+    c0 = max(0, cols[0]  - border_px)
+    c1 = min(img.shape[1], cols[-1]  + border_px + 1)
+
+    return img[r0:r1, c0:c1]
+
+
+def _load_and_crop(fpath, border_px=4):
+    """Load a PNG and crop its white border."""
+    img = mpimg.imread(fpath)
+    return _crop_white(img, border_px=border_px)
+
+
+# ---------------------------------------------------------------------------
 # Grid compositing
 # ---------------------------------------------------------------------------
 
@@ -156,15 +198,25 @@ def build_grid(frame_paths, out_pdf, out_png, output_dpi):
     """Composite 16 frames into a 4×4 publication figure."""
 
     # ------------------------------------------------------------------
+    # Pre-load and crop all images so we know the common cropped aspect
+    # ------------------------------------------------------------------
+    print("  Cropping white borders ...")
+    images = [_load_and_crop(fp) for fp in frame_paths]
+
+    # Use the median cropped aspect ratio (H/W) across all frames
+    aspects = [im.shape[0] / im.shape[1] for im in images]
+    aspect  = float(np.median(aspects))
+
+    # ------------------------------------------------------------------
     # Layout constants  (all in inches unless noted)
     # ------------------------------------------------------------------
     fig_w   = 7.20          # standard journal double-column width
-    pad_l   = 0.30          # left margin
-    pad_r   = 0.10          # right margin
-    pad_t   = 0.12          # top margin
-    pad_b   = 0.55          # bottom margin (space for legend)
-    hgap    = 0.08          # horizontal gap between panels
-    vgap    = 0.18          # vertical gap (room for x0 labels)
+    pad_l   = 0.15          # left margin
+    pad_r   = 0.05          # right margin
+    pad_t   = 0.08          # top margin
+    pad_b   = 0.50          # bottom margin (space for legend)
+    hgap    = 0.00          # horizontal gap between panels
+    vgap    = 0.12          # vertical gap (room for x0 labels)
 
     n_col  = GRID_COLS
     n_row  = GRID_ROWS
@@ -172,11 +224,7 @@ def build_grid(frame_paths, out_pdf, out_png, output_dpi):
     # Panel width from available space
     avail_w  = fig_w - pad_l - pad_r - (n_col - 1) * hgap
     panel_w  = avail_w / n_col
-
-    # Load first image to get aspect ratio
-    sample = mpimg.imread(frame_paths[0])
-    aspect = sample.shape[0] / sample.shape[1]   # H/W
-    panel_h = panel_w * aspect
+    panel_h  = panel_w * aspect
 
     avail_h = n_row * panel_h + (n_row - 1) * vgap
     fig_h   = avail_h + pad_t + pad_b
@@ -191,7 +239,7 @@ def build_grid(frame_paths, out_pdf, out_png, output_dpi):
         return y_in / fig_h
 
     # Add image axes bottom-to-top (matplotlib origin is bottom-left)
-    for idx, (x0, fpath) in enumerate(zip(X0_VALUES, frame_paths)):
+    for idx, (x0, img) in enumerate(zip(X0_VALUES, images)):
         row = idx // n_col     # 0 = top row in display
         col = idx %  n_col
 
@@ -206,7 +254,6 @@ def build_grid(frame_paths, out_pdf, out_png, output_dpi):
             norm_y(panel_h),
         ])
 
-        img = mpimg.imread(fpath)
         ax.imshow(img, aspect="auto", interpolation="lanczos")
         ax.axis("off")
 
@@ -214,7 +261,7 @@ def build_grid(frame_paths, out_pdf, out_png, output_dpi):
         ax.set_title(
             f"$x_{{\\mathrm{{Fe}}}} = {x0:.2f}$",
             fontsize=6.5,
-            pad=2.5,
+            pad=2.0,
             color="black",
         )
 

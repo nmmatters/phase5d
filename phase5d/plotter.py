@@ -986,6 +986,7 @@ class PhaseDiagram5D:
         legend_fontsize: int = 16,
         scalebar_fontsize: int = 14,
         dpi: int = 100,
+        show_scalebar: bool = True,
         max_points: int = 50000,
         min_points: int = 1000,
         markers=None,
@@ -1356,12 +1357,17 @@ class PhaseDiagram5D:
         pl.close()
 
         # Composite PyVista render with matplotlib scale bar + legend
-        _mpl_legend = legend_entries if self.value_type == "phase_stability" else None
-        _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0],
-                          legend_entries=_mpl_legend,
-                          legend_fontsize=legend_fontsize,
-                          scalebar_fontsize=scalebar_fontsize,
-                          output_dpi=dpi)
+        if show_scalebar:
+            _mpl_legend = legend_entries if self.value_type == "phase_stability" else None
+            _add_pv_scale_bar(img_arr, out_path, x0, self.component_labels[0],
+                              legend_entries=_mpl_legend,
+                              legend_fontsize=legend_fontsize,
+                              scalebar_fontsize=scalebar_fontsize,
+                              output_dpi=dpi)
+        else:
+            # Save raw PyVista screenshot without scale bar or legend overlay
+            import matplotlib.image as _mpimg
+            _mpimg.imsave(out_path, img_arr)
         return n_total
 
     def save_frames(

@@ -1194,11 +1194,15 @@ class PhaseDiagram5D:
                 )
 
         # ── title ─────────────────────────────────────────────────────────
+        # Only add the in-viewport label when the scale bar is also shown;
+        # when show_scalebar=False the caller (e.g. render_grid.py) supplies
+        # the x0 annotation externally (e.g. as ax.set_title).
         x0_label = self.component_labels[0]
-        pl.add_text(
-            f"x({x0_label}) = {x0:.3f}",
-            position="upper_left", font_size=title_fontsize, color="black",
-        )
+        if show_scalebar:
+            pl.add_text(
+                f"x({x0_label}) = {x0:.3f}",
+                position="upper_left", font_size=title_fontsize, color="black",
+            )
 
         # ── legend ────────────────────────────────────────────────────────
         # Use the *full* dataset to decide which labels belong in the legend

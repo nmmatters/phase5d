@@ -31,7 +31,16 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 
-# Headless rendering — must be set before pyvista/vtk is imported.
+# Headless rendering — all env vars must be set before pyvista/vtk is imported.
+#
+# VTK's X11 backend (vtkXOpenGLRenderWindow) always tries to connect to an X
+# server, even with off_screen=True.  To avoid X entirely we switch to the EGL
+# backend, which renders via GPU or Mesa EGL without any display server.
+# VTK_DEFAULT_RENDER_WINDOW_BACKEND=EGL is the canonical way to do this in
+# VTK ≥ 9.x.  PYVISTA_OFF_SCREEN and VTK_DEFAULT_RENDER_WINDOW_OFFSCREEN are
+# kept as belt-and-suspenders for environments that support the X11 backend in
+# offscreen mode.
+os.environ.setdefault("VTK_DEFAULT_RENDER_WINDOW_BACKEND", "EGL")
 os.environ["PYVISTA_OFF_SCREEN"] = "true"
 os.environ.setdefault("VTK_DEFAULT_RENDER_WINDOW_OFFSCREEN", "1")
 

@@ -104,42 +104,44 @@ def _resolve_npz(dat_path: str) -> str:
 
 
 def load_data(dat_path: str) -> np.ndarray:
-    """Load compositions from a .dat file and stability labels from the paired .npz.
+    """Load stability labels from the paired .npz and exact grid compositions.
 
     Returns a phase5d-compatible (N, 5) array:
       columns: [xMn, xNi, xCo, xCu, stability_function]
     phase5d infers x0 = x(Fe) = 1 - xMn - xNi - xCo - xCu implicitly.
 
+    Compositions come from generate_composition_space() (the same exact-decimal
+    grid used by phasenumber) rather than the raw .dat float values. This avoids
+    floating-point precision drift (e.g. 0.0999999… vs 0.10) that would cause
+    the x(Fe) slice to pick up different points than phasenumber's render, making
+    the two visualisations look mismatched even when the underlying data agrees.
+
     The stability_function column comes from the .npz 'phase_diagram_data' array:
       -1  unstable    (negative Hessian eigenvalue, QF < 0)
        0  meta-stable
        1  stable      (1-phase simplex vertex from convex hull)
-    QF from the .dat is used only to identify and drop sentinel rows (QF >= 1e4).
+    The .npz is indexed by the same generate_composition_space() grid, so no
+    row-filtering or reordering is needed.
     """
-    npz_path = _resolve_npz(dat_path)
-    print(f"Loading compositions from {os.path.basename(dat_path)} ...")
-    print(f"Loading stability labels from {os.path.basename(npz_path)} ...")
-    t0  = time.time()
-    raw = np.loadtxt(dat_path, skiprows=1)
-    print(f"  {len(raw):,} rows loaded in {time.time()-t0:.1f}s")
+    from phasenumber.composition import generate_composition_space
 
+    npz_path = _resolve_npz(dat_path)
+    print(f"Loading stability labels from {os.path.basename(npz_path)} ...")
     stability = np.load(npz_path)["phase_diagram_data"]
-    if len(stability) != len(raw):
+
+    print(f"Generating composition grid (step=0.01) ...")
+    t0 = time.time()
+    comp_space, _ = generate_composition_space(step=0.01)
+    print(f"  {len(comp_space):,} grid points in {time.time()-t0:.1f}s")
+
+    if len(stability) != len(comp_space):
         raise ValueError(
-            f"Row count mismatch: {os.path.basename(dat_path)} has {len(raw):,} rows "
+            f"Length mismatch: composition grid has {len(comp_space):,} points "
             f"but {os.path.basename(npz_path)} has {len(stability):,} entries."
         )
 
-    x_mn, x_ni, x_co, x_cu = raw[:, 15], raw[:, 16], raw[:, 17], raw[:, 18]
-    qf = raw[:, 19]
-
-    # Drop sentinel rows (pure-component reference points, QF >> 1)
-    valid = qf < 1e4
-    x_mn, x_ni, x_co, x_cu = x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid]
-    stability = stability[valid]
-
-    data = np.column_stack([x_mn, x_ni, x_co, x_cu, stability])
-    print(f"  {len(data):,} valid points after filtering")
+    data = np.column_stack([comp_space, stability])
+    print(f"  {len(data):,} points ready")
     return data
 
 

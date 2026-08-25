@@ -98,26 +98,24 @@ def _resolve_npz(dat_path):
 
 
 def load_data(dat_path):
+    from phasenumber.composition import generate_composition_space
     npz_path = _resolve_npz(dat_path)
-    print(f"  compositions  : {os.path.basename(dat_path)}")
-    print(f"  stability     : {os.path.basename(npz_path)}")
-    t0  = time.time()
-    raw = np.loadtxt(dat_path, skiprows=1)
-    print(f"  {len(raw):,} rows loaded in {time.time()-t0:.1f}s")
-
+    print(f"  stability : {os.path.basename(npz_path)}")
     stability = np.load(npz_path)["phase_diagram_data"]
-    if len(stability) != len(raw):
+
+    print(f"  Generating composition grid (step=0.01) ...")
+    t0 = time.time()
+    comp_space, _ = generate_composition_space(step=0.01)
+    print(f"  {len(comp_space):,} grid points in {time.time()-t0:.1f}s")
+
+    if len(stability) != len(comp_space):
         raise ValueError(
-            f"Row count mismatch: .dat has {len(raw):,} rows "
+            f"Length mismatch: composition grid has {len(comp_space):,} points "
             f"but .npz has {len(stability):,} entries."
         )
 
-    x_mn, x_ni, x_co, x_cu = raw[:, 15], raw[:, 16], raw[:, 17], raw[:, 18]
-    qf    = raw[:, 19]
-    valid = qf < 1e4
-    data  = np.column_stack([x_mn[valid], x_ni[valid], x_co[valid], x_cu[valid],
-                              stability[valid]])
-    print(f"  {len(data):,} valid points after sentinel filtering")
+    data = np.column_stack([comp_space, stability])
+    print(f"  {len(data):,} points ready")
     return data
 
 

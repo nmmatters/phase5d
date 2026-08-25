@@ -31,13 +31,9 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 
-# Headless rendering: set VTK offscreen mode before pyvista is imported.
+# Headless rendering — must be set before pyvista/vtk is imported.
+os.environ["PYVISTA_OFF_SCREEN"] = "true"
 os.environ.setdefault("VTK_DEFAULT_RENDER_WINDOW_OFFSCREEN", "1")
-if not os.environ.get("DISPLAY"):
-    try:
-        import pyvista as _pv; _pv.start_xvfb()
-    except Exception:
-        pass
 
 # ---------------------------------------------------------------------------
 # Paths

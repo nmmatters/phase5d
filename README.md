@@ -681,19 +681,19 @@ repository directly:
 
 ```bibtex
 @software{marschall_phase5d_2026,
-  author    = {Marschall, Niklas},
-  title     = {{phase5d}: 5D phase diagram visualization for high-entropy alloys},
-  year      = {2026},
-  version   = {0.1.0},
-  url       = {https://github.com/nmmatters/phase5d},
-  license   = {MIT},
+  author  = {Marschall, Niklas},
+  title   = {{phase5d}: 5D Phase Diagram Visualization for High-Entropy Alloys},
+  version = {0.1.0},
+  date    = {2026-05-15},
+  url     = {https://github.com/nmmatters/phase5d},
+  note    = {Accessed: 2026-08-31},
 }
 ```
 
 Or in plain text:
 
-> N. Marschall, *phase5d: 5D phase diagram visualization for high-entropy
-> alloys* (2026). https://github.com/nmmatters/phase5d
+> N. Marschall, *phase5d: 5D Phase Diagram Visualization for High-Entropy
+> Alloys*, v0.1.0 (2026-05-15). https://github.com/nmmatters/phase5d
 
 You can also retrieve the citation programmatically:
 
